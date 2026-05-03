@@ -1,0 +1,45 @@
+{
+  "name": "slonks-api",
+  "version": "0.1.0",
+  "description": "Indexer, API, and CLI for Slonks.",
+  "private": true,
+  "type": "module",
+  "repository": {
+    "type": "git",
+    "url": "git+ssh://git@github.com/blockhash-xyz/slonks-api.git"
+  },
+  "bugs": {
+    "url": "https://github.com/blockhash-xyz/slonks-api/issues"
+  },
+  "homepage": "https://github.com/blockhash-xyz/slonks-api#readme",
+  "bin": {
+    "slonks": "./src/cli/slonks.ts"
+  },
+  "scripts": {
+    "cli": "bun src/cli/slonks.ts",
+    "dev:web": "bun --watch src/web.ts",
+    "dev:indexer": "bun --watch src/indexer/index.ts",
+    "start:web": "bun src/web.ts",
+    "start:indexer": "bun src/indexer/index.ts",
+    "slop:plan": "bun src/cli/slonks.ts plan",
+    "publish:cli:dry": "cd packages/slonks && bun publish --dry-run",
+    "publish:cli": "cd packages/slonks && bun publish --access public",
+    "typecheck": "tsc --noEmit",
+    "db:generate": "drizzle-kit generate",
+    "db:migrate": "bun src/db/migrate.ts",
+    "db:studio": "drizzle-kit studio"
+  },
+  "dependencies": {
+    "@hono/zod-validator": "^0.4.1",
+    "drizzle-orm": "^0.36.0",
+    "hono": "^4.6.10",
+    "postgres": "^3.4.5",
+    "viem": "^2.38.4",
+    "zod": "^3.23.8"
+  },
+  "devDependencies": {
+    "@types/bun": "^1.1.13",
+    "drizzle-kit": "^0.28.0",
+    "typescript": "^5.6.3"
+  }
+}
