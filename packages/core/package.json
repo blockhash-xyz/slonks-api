@@ -1,0 +1,42 @@
+{
+  "name": "@blockhash/slonks-core",
+  "version": "0.1.0",
+  "description": "Shared Slonks model, merge, rendering, and diff utilities.",
+  "type": "module",
+  "files": [
+    "assets",
+    "LICENSE",
+    "README.md",
+    "src"
+  ],
+  "exports": {
+    "./attributes": "./src/attributes.ts",
+    "./blend": "./src/blend.ts",
+    "./diff": "./src/diff.ts",
+    "./hex": "./src/hex.ts",
+    "./imageModel": "./src/imageModel.ts",
+    "./palette": "./src/palette.ts"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+ssh://git@github.com/blockhash-xyz/slonks-api.git",
+    "directory": "packages/core"
+  },
+  "bugs": {
+    "url": "https://github.com/blockhash-xyz/slonks-api/issues"
+  },
+  "homepage": "https://github.com/blockhash-xyz/slonks-api/tree/main/packages/core#readme",
+  "publishConfig": {
+    "access": "public"
+  },
+  "keywords": [
+    "slonks",
+    "nft",
+    "ethereum",
+    "image-model"
+  ],
+  "license": "MIT",
+  "dependencies": {
+    "viem": "^2.38.4"
+  }
+}

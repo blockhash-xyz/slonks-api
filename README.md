@@ -1,7 +1,7 @@
 # slonks-api
 
-Indexer, read API, OpenSea proxy, merge-preview engine, and local CLI for Slonks.
-The API mirrors the on-chain Slonks rendering math so apps can read token snapshots,
+Monorepo for the Slonks API, shared model code, and `slonks` CLI. The API
+mirrors the on-chain Slonks rendering math so apps can read token snapshots,
 pixels, merge previews, listings, holders, and activity without doing huge
 `eth_call`s from the browser.
 
@@ -18,6 +18,12 @@ https://api.slonks.xyz
 - viem mainnet reads
 - drizzle-orm + Postgres
 - Fly app with two process groups: `web` and `indexer`
+
+## Packages
+
+- `packages/api`: private `@blockhash/slonks-api` package for the indexer, HTTP API, Fly config, Dockerfile, and migrations.
+- `packages/core`: shared `@blockhash/slonks-core` package for attributes, embedding blending, local rendering, palette data, and diff math.
+- `packages/cli`: public `@blockhash/slonks` package for the downloadable Slonks CLI.
 
 ## Contracts
 
@@ -550,7 +556,8 @@ type MergeEvent = {
 
 The CLI is intentionally named `slonks`, with subcommands. The main command is
 `mine`: a local slop miner that keeps spending your machine's compute looking
-for better merge paths. The npm package is `@blockhash/slonks`.
+for better merge paths. The npm package is `@blockhash/slonks`; the shared
+rendering and merge code lives in `@blockhash/slonks-core`.
 
 Run without installing:
 
@@ -687,8 +694,10 @@ Useful scripts:
 - `bun run slop:mine -- --help`
 - `bun run typecheck`
 - `bun run db:studio`
+- `bun run deploy:api`
 
-CLI package license: MIT. See [packages/slonks/LICENSE](packages/slonks/LICENSE).
+CLI package license: MIT. See [packages/cli/LICENSE](packages/cli/LICENSE).
+Core package license: MIT. See [packages/core/LICENSE](packages/core/LICENSE).
 
 ## Environment
 
@@ -709,7 +718,7 @@ CLI package license: MIT. See [packages/slonks/LICENSE](packages/slonks/LICENSE)
 fly launch --no-deploy
 fly secrets set DATABASE_URL=postgres://... ALCHEMY_API_KEY=...
 fly secrets set OPENSEA_API_KEY=...
-fly deploy
+bun run deploy:api
 ```
 
 The `web` process serves HTTP. The `indexer` process runs the sync loop. Both share

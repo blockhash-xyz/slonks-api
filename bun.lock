@@ -2,8 +2,18 @@
   "lockfileVersion": 1,
   "workspaces": {
     "": {
-      "name": "slonks-api",
+      "name": "slonks",
+      "devDependencies": {
+        "@types/bun": "^1.1.13",
+        "drizzle-kit": "^0.28.0",
+        "typescript": "^5.6.3",
+      },
+    },
+    "packages/api": {
+      "name": "@blockhash/slonks-api",
+      "version": "0.1.3",
       "dependencies": {
+        "@blockhash/slonks-core": "0.1.0",
         "@hono/zod-validator": "^0.4.1",
         "drizzle-orm": "^0.36.0",
         "hono": "^4.6.10",
@@ -11,15 +21,33 @@
         "viem": "^2.38.4",
         "zod": "^3.23.8",
       },
-      "devDependencies": {
-        "@types/bun": "^1.1.13",
-        "drizzle-kit": "^0.28.0",
-        "typescript": "^5.6.3",
+    },
+    "packages/cli": {
+      "name": "@blockhash/slonks",
+      "version": "0.1.3",
+      "bin": {
+        "slonks": "./src/cli/slonks.ts",
+      },
+      "dependencies": {
+        "@blockhash/slonks-core": "0.1.0",
+      },
+    },
+    "packages/core": {
+      "name": "@blockhash/slonks-core",
+      "version": "0.1.0",
+      "dependencies": {
+        "viem": "^2.38.4",
       },
     },
   },
   "packages": {
     "@adraffy/ens-normalize": ["@adraffy/ens-normalize@1.11.1", "", {}, "sha512-nhCBV3quEgesuf7c7KYfperqSS14T8bYuvJ8PcLJp6znkZpFc0AuW4qBtr8eKVyPPe/8RSr7sglCWPU5eaxwKQ=="],
+
+    "@blockhash/slonks": ["@blockhash/slonks@workspace:packages/cli"],
+
+    "@blockhash/slonks-api": ["@blockhash/slonks-api@workspace:packages/api"],
+
+    "@blockhash/slonks-core": ["@blockhash/slonks-core@workspace:packages/core"],
 
     "@drizzle-team/brocli": ["@drizzle-team/brocli@0.10.2", "", {}, "sha512-z33Il7l5dKjUgGULTqBsQBQwckHh5AbIuxhdsIxDDiZAzBOrZO6q9ogcWC65kU382AfynTfgNumVcNIjuIua6w=="],
 

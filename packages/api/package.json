@@ -1,0 +1,25 @@
+{
+  "name": "@blockhash/slonks-api",
+  "version": "0.1.3",
+  "description": "Indexer and HTTP API for Slonks.",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "dev:web": "bun --watch src/web.ts",
+    "dev:indexer": "bun --watch src/indexer/index.ts",
+    "start:web": "bun src/web.ts",
+    "start:indexer": "bun src/indexer/index.ts",
+    "db:generate": "cd ../.. && drizzle-kit generate --config packages/api/drizzle.config.ts",
+    "db:migrate": "bun src/db/migrate.ts",
+    "db:studio": "cd ../.. && drizzle-kit studio --config packages/api/drizzle.config.ts"
+  },
+  "dependencies": {
+    "@blockhash/slonks-core": "0.1.0",
+    "@hono/zod-validator": "^0.4.1",
+    "drizzle-orm": "^0.36.0",
+    "hono": "^4.6.10",
+    "postgres": "^3.4.5",
+    "viem": "^2.38.4",
+    "zod": "^3.23.8"
+  }
+}
