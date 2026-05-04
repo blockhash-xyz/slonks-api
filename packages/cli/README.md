@@ -1,8 +1,18 @@
 # slonks
 
-Command-line tools for Slonks.
+Command-line tools for Slonks. The npm package is `@blockhash/slonks`, and the
+installed binary is `slonks`.
 
-## Run
+The CLI fetches indexed token/listing data from `https://api.slonks.xyz`, then
+runs merge search locally with `@blockhash/slonks-core`.
+
+## Requirements
+
+- Bun `>=1.2.0`
+
+## Install
+
+Run without installing:
 
 ```bash
 bunx @blockhash/slonks mine --owner 0x...
@@ -58,6 +68,29 @@ Options:
 - `--api URL`: API base URL. Default: `https://api.slonks.xyz`.
 - `--help`: show command help.
 
+JSON output shape:
+
+```ts
+{
+  ownerTokenCount: number;
+  poolSize: number;
+  passes: Array<{
+    pass: number;
+    mode: "beam" | "deep-l2";
+    maxLevel: number;
+    beamSize: number;
+    generated: number;
+    best: MinedPath | null;
+    targetHit: boolean;
+  }>;
+  best: MinedPath | null;
+  target: number | null;
+  targetHit: boolean;
+  exitReason: string;
+  elapsedSeconds: number;
+}
+```
+
 ## `slonks global-l1`
 
 Check every directed one-level merge between live unmerged tokens. The command
@@ -75,6 +108,16 @@ Options:
 - `--workers N`: local worker processes. Default: `min(cpu - 1, 8)`.
 - `--max-tokens N`: testing cap; omit for the full unmerged collection.
 - `--json`: emit machine-readable JSON.
+
+## Development
+
+Run from the repo root:
+
+```bash
+bun run cli -- --help
+bun run cli -- mine --owner 0x...
+bun test packages/cli
+```
 
 ## License
 
