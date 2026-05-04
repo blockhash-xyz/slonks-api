@@ -1,6 +1,6 @@
 {
   "name": "@blockhash/slonks",
-  "version": "0.1.2",
+  "version": "0.1.3",
   "description": "Command-line tools for Slonks.",
   "type": "module",
   "bin": {
@@ -8,6 +8,7 @@
   },
   "files": [
     "assets",
+    "LICENSE",
     "src/cli",
     "src/slonks",
     "README.md"
@@ -33,5 +34,5 @@
     "cli",
     "ethereum"
   ],
-  "license": "UNLICENSED"
+  "license": "MIT"
 }

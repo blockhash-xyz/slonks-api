@@ -688,6 +688,8 @@ Useful scripts:
 - `bun run typecheck`
 - `bun run db:studio`
 
+CLI package license: MIT. See [packages/slonks/LICENSE](packages/slonks/LICENSE).
+
 ## Environment
 
 - `DATABASE_URL`: required Postgres URL.

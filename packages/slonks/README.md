@@ -75,3 +75,7 @@ Options:
 - `--workers N`: local worker processes. Default: `min(cpu - 1, 8)`.
 - `--max-tokens N`: testing cap; omit for the full unmerged collection.
 - `--json`: emit machine-readable JSON.
+
+## License
+
+MIT
