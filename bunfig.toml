@@ -1,0 +1,10 @@
+[test]
+coverage = true
+coverageReporter = ["text", "lcov"]
+coverageDir = "coverage"
+coverageSkipTestFiles = true
+coverageThreshold = { lines = 1.0, functions = 1.0, statements = 1.0 }
+coveragePathIgnorePatterns = [
+  "packages/api/src/chain/abis.ts",
+  "packages/api/src/db/migrations/**"
+]

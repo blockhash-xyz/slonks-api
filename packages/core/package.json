@@ -3,6 +3,9 @@
   "version": "0.1.0",
   "description": "Shared Slonks model, merge, rendering, and diff utilities.",
   "type": "module",
+  "scripts": {
+    "test": "cd ../.. && bun test packages/core"
+  },
   "files": [
     "assets",
     "LICENSE",

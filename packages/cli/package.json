@@ -6,6 +6,9 @@
   "bin": {
     "slonks": "./src/cli/slonks.ts"
   },
+  "scripts": {
+    "test": "cd ../.. && bun test packages/cli"
+  },
   "files": [
     "LICENSE",
     "src/cli",

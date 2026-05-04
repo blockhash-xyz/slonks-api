@@ -13,8 +13,6 @@ const CANDIDATE_OFFSET = VOCAB_SIZE * EMBED_DIM;
 const HEAD_OFFSET = CANDIDATE_OFFSET + SLONK_PIXELS * CANDIDATES;
 const WEIGHT_SIZE = HEAD_OFFSET + SLONK_PIXELS * CANDIDATES * EMBED_DIM;
 const DEFAULT_WEIGHTS_URL = new URL("../assets/model_weights_slonk_candidate_10k_18x10_canonical.bin", import.meta.url);
-const MAX_RENDER_CACHE = 20_000;
-
 let cachedWeights: Uint8Array | null = null;
 let cachedSignedWeights: Int8Array | null = null;
 const renderCache = new Map<string, Uint8Array>();
@@ -176,7 +174,17 @@ function signedByte(value: number): number {
 
 function rememberRender(key: string, pixels: Uint8Array): void {
   renderCache.set(key, pixels);
-  if (renderCache.size <= MAX_RENDER_CACHE) return;
+  if (renderCache.size <= maxRenderCache()) return;
   const first = renderCache.keys().next().value;
   if (first) renderCache.delete(first);
+}
+
+function maxRenderCache(): number {
+  return Number(process.env.SLONKS_RENDER_CACHE_SIZE ?? 20_000);
+}
+
+export function clearImageModelCaches(): void {
+  cachedWeights = null;
+  cachedSignedWeights = null;
+  renderCache.clear();
 }

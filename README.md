@@ -692,9 +692,16 @@ Useful scripts:
 
 - `bun run cli -- --help`
 - `bun run slop:mine -- --help`
+- `bun test`
+- `bun run test:api`
+- `bun run test:cli`
+- `bun run test:core`
 - `bun run typecheck`
 - `bun run db:studio`
 - `bun run deploy:api`
+
+Coverage is enabled in `bunfig.toml` and fails the test run unless loaded source
+files hit 100% line, function, and statement coverage.
 
 CLI package license: MIT. See [packages/cli/LICENSE](packages/cli/LICENSE).
 Core package license: MIT. See [packages/core/LICENSE](packages/core/LICENSE).
