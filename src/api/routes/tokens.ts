@@ -4,6 +4,7 @@ import { isAddress } from "viem";
 import { db } from "../../db/client.ts";
 import { collectionState, sourcePunks, tokens, transfers, merges } from "../../db/schema.ts";
 import { buildTokenSnapshot } from "../../lib/snapshot.ts";
+import { buildMergeTree } from "../lineage.ts";
 import { includeParam, mergeDto, tokenListDto, transferDto } from "../dto.ts";
 
 export const tokens_route: Hono = new Hono();
@@ -167,16 +168,15 @@ tokens_route.get("/", async (c) => {
   return c.json({ items, page, limit, hasMore, nextPage });
 });
 
-// Merge ancestry (donor → survivor edges) for a token.
+// Full merge tree for a token, including nested donors and per-step state changes.
 tokens_route.get("/:id{[0-9]+}/lineage", async (c) => {
   const id = Number(c.req.param("id"));
   if (!validTokenId(id)) return c.json({ error: `invalid token id ${id}` }, 400);
-  const rows = await db
-    .select()
-    .from(merges)
-    .where(eq(merges.survivorTokenId, id))
-    .orderBy(asc(merges.blockNumber), asc(merges.logIndex));
-  return c.json({ tokenId: id, merges: rows.map(mergeDto) });
+  const includePixels = includeParam(c.req.query("include"), "pixels");
+  const tree = await buildMergeTree(id, includePixels);
+  if (!tree) return c.json({ error: "token not found" }, 404);
+  c.header("Cache-Control", "public, s-maxage=60, stale-while-revalidate=300");
+  return c.json(tree);
 });
 
 // Per-token transfer + merge history.

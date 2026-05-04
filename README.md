@@ -223,15 +223,61 @@ Normal filtered response:
 
 ### `GET /tokens/:id/lineage`
 
-Merge ancestry edges where this token was the survivor.
+Full merge tree for the token. This replaces the old flat survivor-only lineage
+response. The tree includes the requested token itself, every donor subtree that
+was merged into it, and the before/after state for each merge step.
+
+Query params:
+
+- `include=pixels`: include `generatedPixels` and `originalRgba` on each state.
 
 Returns:
 
 ```ts
 {
   tokenId: number;
+  includePixels: boolean;
+  tokenIds: number[];
+  mergeCount: number;
+  root: MergeTreeNode;
   merges: MergeEvent[];
 }
+
+type MergeTreeNode = {
+  tokenId: number;
+  exists: boolean;
+  owner: string | null;
+  sourceId: number | null;
+  baseSourceId: number | null;
+  punkType: string | null;
+  attributesText: string | null;
+  initial: MergeTreeState;
+  current: MergeTreeState;
+  mergeCount: number;
+  leafCount: number;
+  merges: Array<{
+    event: MergeEvent;
+    before: MergeTreeState;
+    after: MergeTreeState;
+    change: {
+      mergeLevelDelta: number | null;
+      diffCountDelta: number | null;
+      slopLevelDelta: number | null;
+    };
+    donor: MergeTreeNode;
+  }>;
+};
+
+type MergeTreeState = {
+  tokenId: number;
+  sourceId: number | null;
+  mergeLevel: number;
+  embedding: string | null;
+  diffCount: number | null;
+  slopLevel: number | null;
+  generatedPixels?: string | null;
+  originalRgba?: string | null;
+};
 ```
 
 ### `GET /tokens/:id/history`
