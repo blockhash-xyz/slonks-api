@@ -1,6 +1,6 @@
 {
   "name": "@blockhash/slonks",
-  "version": "0.1.1",
+  "version": "0.1.2",
   "description": "Command-line tools for Slonks.",
   "type": "module",
   "bin": {

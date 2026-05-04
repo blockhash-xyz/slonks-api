@@ -548,35 +548,36 @@ type MergeEvent = {
 
 ## Slonks CLI
 
-The CLI is intentionally named `slonks`, with subcommands. The planner is the
-first command. The npm package is `@blockhash/slonks`.
+The CLI is intentionally named `slonks`, with subcommands. The main command is
+`mine`: a local slop miner that keeps spending your machine's compute looking
+for better merge paths. The npm package is `@blockhash/slonks`.
 
 Run without installing:
 
 ```bash
-bunx @blockhash/slonks plan --owner 0x...
+bunx @blockhash/slonks mine --owner 0x...
 ```
 
 Install globally:
 
 ```bash
 bun add -g @blockhash/slonks
-slonks plan --owner 0x...
+slonks mine --owner 0x...
 ```
 
 Installed command shape:
 
 ```bash
 slonks <command> [options]
-slonks plan --owner 0x...
+slonks mine --owner 0x...
 slonks --owner 0x...
 ```
 
 Repo-local command shape:
 
 ```bash
-bun run cli -- plan --owner 0x...
-bun run slop:plan -- --owner 0x...
+bun run cli -- mine --owner 0x...
+bun run slop:mine -- --owner 0x...
 ```
 
 General commands:
@@ -585,102 +586,62 @@ General commands:
 - `slonks help <command>`: show help for a command.
 - `slonks --version`: print the installed CLI version.
 
-### `slonks plan`
+### `slonks mine`
 
-Find high-slop merge paths for a holder. The command fetches owned token snapshots
-from the API, then runs the combinatorial merge search locally using the same
-bundled model weights as the API. This keeps expensive path search off the hosted
-API.
+Mine high-slop merge paths for a holder. The command fetches token snapshots from
+the API, then runs the combinatorial search locally using the same bundled model
+weights as the API. By default it shows a live terminal UI and keeps running,
+moving from level 1 to deeper/wider searches until you stop it.
 
-Example:
+Mine forever and print better paths as they are found:
 
 ```bash
-slonks plan --owner 0x2052051a0474fb0b98283b3f38c13b0b0b6a3677 --max-level 5 --beam-size 384 --per-anchor 24 --refine-l2 512 --top 10
+slonks mine --owner 0x2052051a0474fb0b98283b3f38c13b0b0b6a3677
 ```
 
-Include currently listed Slonks in the same search pool:
+Stop once a target diff count is found:
 
 ```bash
-slonks plan --owner 0x... --include-listings --max-level 5 --beam-size 384 --per-anchor 24 --refine-l2 512 --top 10
+slonks mine --owner 0x... --target 330
 ```
 
-With `--include-listings`, the CLI walks every cursor page from
-`https://api.slonks.xyz/listings` and never talks to OpenSea directly. It waits
-between pages and backs off on rate limits. For quick testing, cap the scan:
+Include currently listed Slonks up to `2x` floor in the same search pool:
 
 ```bash
-slonks plan --owner 0x... --include-listings --max-listing-pages 1 --max-level 2 --beam-size 64 --top 5
+slonks mine --owner 0x... --listings --budget 0.02 --target 330
 ```
 
 Options:
 
 - `--owner 0x...`: required holder address.
+- `--target N`: stop when a path reaches diff count `N`.
+- `--listings`: include listed Slonks from `/listings`, capped to `2x` floor by default.
+- `--budget ETH`: include listings, but only show paths at or below this total ETH spend.
+- `--once`: run one strong mining pass and exit.
+- `--top N`: number of paths to keep/show. Default: `10`.
+- `--json`: emit final machine-readable JSON. Requires `--once` or `--target`.
 - `--api URL`: API base URL. Default: `https://api.slonks.xyz`.
-- `--mode MODE`: search mode. `beam` is the default; `deep-l2` runs exact L1 and a bounded streaming L2 scan.
-- `--include-listings`: include all currently listed Slonks from `/listings`.
-- `--listing-delay-ms N`: delay between listing pages. Default: `1000`.
-- `--max-listing-pages N`: optional listings page cap for testing. Default: `0`, meaning all pages.
-- `--max-listing-price-eth N`: skip listed tokens above this ETH price.
-- `--max-listing-floor-multiple N`: skip listed tokens above `N` times the current floor price.
-- `--max-total-listing-price-eth N`: skip paths whose total listed-token price exceeds this ETH price.
-- `--max-level N`: highest result merge level to search. Default: `4`.
-- `--beam-size N`: states to keep per generated level. Higher is slower but explores more. Default: `32`.
-- `--l1-frontier N`: L1 survivor frontier size for `deep-l2`. Default: `512`.
-- `--l2-budget N`: valid L2 previews to scan in `deep-l2`. Default: `1000000`; `0` means no cap.
-- `--per-anchor N`: diversity cap per survivor anchor inside the beam. Default: `4`.
-- `--diversity N`: `0..1` fraction of each beam reserved for embedding-diverse candidates. Default: `0.25`.
-- `--refine-l2 N`: exact L2 donor scan for the top `N` L1 survivor branches. Default: `0`.
-- `--top N`: number of paths to print. Default: `10`.
-- `--json`: emit machine-readable JSON on stdout; progress/status goes to stderr.
 - `--help`: show command help.
-
-Recommended deeper search:
-
-```bash
-slonks plan --owner 0x... --max-level 5 --beam-size 384 --per-anchor 24 --refine-l2 512 --top 10
-```
-
-Fast smoke search:
-
-```bash
-slonks plan --owner 0x... --max-level 2 --beam-size 64 --top 5
-```
 
 JSON output shape:
 
 ```ts
 {
   ownerTokenCount: number;
-  levels: Array<{
-    inputLevel: number;
-    outputLevel: number;
-    poolSize: number;
+  poolSize: number;
+  passes: Array<{
+    pass: number;
+    mode: "beam" | "deep-l2";
+    maxLevel: number;
+    beamSize: number;
     generated: number;
-    kept: number;
+    best: MinedPath | null;
+    targetHit: boolean;
   }>;
-  refinements: Array<{
-    level: number;
-    survivors: number;
-    donors: number;
-    generated: number;
-    kept: number;
-  }>;
-  best: Array<{
-    label: string;
-    level: number;
-    survivorTokenId: number;
-    tokenIds: number[];
-    diffCount: number;
-    slopLevel: number;
-    steps: Array<{
-      survivor: string;
-      donor: string;
-      result: string;
-      resultLevel: number;
-      diffCount: number;
-      slopLevel: number;
-    }>;
-  }>;
+  best: MinedPath | null;
+  target: number | null;
+  targetHit: boolean;
+  exitReason: string;
   elapsedSeconds: number;
 }
 ```
@@ -723,7 +684,7 @@ bun run dev:indexer
 Useful scripts:
 
 - `bun run cli -- --help`
-- `bun run slop:plan -- --help`
+- `bun run slop:mine -- --help`
 - `bun run typecheck`
 - `bun run db:studio`
 

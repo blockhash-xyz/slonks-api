@@ -1,6 +1,6 @@
 {
   "name": "slonks-api",
-  "version": "0.1.0",
+  "version": "0.1.2",
   "description": "Indexer, API, and CLI for Slonks.",
   "private": true,
   "type": "module",
@@ -21,7 +21,7 @@
     "dev:indexer": "bun --watch src/indexer/index.ts",
     "start:web": "bun src/web.ts",
     "start:indexer": "bun src/indexer/index.ts",
-    "slop:plan": "bun src/cli/slonks.ts plan",
+    "slop:mine": "bun src/cli/slonks.ts mine",
     "publish:cli:dry": "cd packages/slonks && bun publish --dry-run",
     "publish:cli": "cd packages/slonks && bun publish --access public",
     "typecheck": "tsc --noEmit",

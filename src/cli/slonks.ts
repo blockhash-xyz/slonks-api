@@ -1,6 +1,6 @@
 #!/usr/bin/env bun
 
-import { runSlopPlanner } from "./slopPlanner.ts";
+import { runSlopMiner } from "./miner.ts";
 import { runGlobalL1 } from "./globalL1.ts";
 
 type Command = {
@@ -9,9 +9,9 @@ type Command = {
 };
 
 const COMMANDS: Record<string, Command> = {
-  plan: {
-    description: "Find high-slop merge paths for a holder",
-    run: runSlopPlanner,
+  mine: {
+    description: "Mine high-slop merge paths for a holder",
+    run: runSlopMiner,
   },
   "global-l1": {
     description: "Check every one-level merge between unmerged tokens",
@@ -44,13 +44,8 @@ async function main() {
     return;
   }
 
-  if (command === "slop" && argv[1] === "plan") {
-    await runSlopPlanner(argv.slice(2));
-    return;
-  }
-
   if (command.startsWith("--")) {
-    await runSlopPlanner(argv);
+    await runSlopMiner(argv);
     return;
   }
 
@@ -86,7 +81,7 @@ function usage() {
 
   console.log(`Usage:
   slonks <command> [options]
-  slonks --owner 0x... [plan options]
+  slonks --owner 0x... [mine options]
 
 Commands:
 ${commandHelp}

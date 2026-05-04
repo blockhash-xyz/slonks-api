@@ -8,10 +8,8 @@ import {
   getJson,
   logStatus as writeLogStatus,
   normalizeApiUrl,
-  parseNonNegativeInt,
   parseNonNegativeNumber,
   parsePositiveInt,
-  parseRatio,
   requireValue,
   sleep,
 } from "./common.ts";
@@ -97,8 +95,30 @@ type Args = {
   perAnchor: number;
   diversity: number;
   refineL2: number;
+  target: number | null;
+  once: boolean;
+  tui: boolean;
   top: number;
   json: boolean;
+  onProgress?: (progress: MinerProgress) => void;
+};
+
+type SerializedState = ReturnType<typeof serializeState>;
+
+type MinerProgress = {
+  phase?: string;
+  message?: string;
+  pass?: number;
+  level?: number;
+  maxLevel?: number;
+  poolSize?: number;
+  generated?: number;
+  checked?: number;
+  kept?: number;
+  possible?: number;
+  totalGenerated?: number;
+  best?: SerializedState | null;
+  done?: boolean;
 };
 
 const LISTING_PAGE_LIMIT = 100;
@@ -106,84 +126,253 @@ const DEFAULT_LISTING_DELAY_MS = 1_000;
 const LISTING_PROGRESS_EVERY = 5;
 const DEFAULT_L1_FRONTIER = 512;
 const DEFAULT_L2_BUDGET = 1_000_000;
+const DEFAULT_LISTING_FLOOR_MULTIPLE = 2;
 
-export async function runSlopPlanner(argv = process.argv.slice(2)) {
-  const args = parseArgs(normalizePlannerArgs(argv));
+export async function runSlopMiner(argv = process.argv.slice(2)) {
+  const args = parseArgs(normalizeMineArgs(argv));
   if (!args.owner) {
     usage();
     process.exit(1);
   }
+  if (args.json && !args.once && args.target == null) {
+    throw new Error("--json requires --once or --target because mining runs forever by default");
+  }
 
   const started = Date.now();
+  const ui = args.tui && !args.json && process.stdout.isTTY ? new MinerUi(args, started) : null;
+  if (ui) args.onProgress = (progress) => ui.update(progress);
+
   logStatus(args, `Fetching Slonks for ${args.owner} from ${args.api}`);
-  const plannerTokens = await fetchPlannerTokens(args);
-  const baseStates = snapshotsToStates(plannerTokens.tokens);
-  if (baseStates.length === 0) throw new Error("no plannable tokens found");
+  const minerTokens = await fetchPlannerTokens(args);
+  const baseStates = snapshotsToStates(minerTokens.tokens);
+  if (baseStates.length === 0) throw new Error("no mineable tokens found");
 
   const currentBest = [...baseStates].sort(compareStates)[0]!;
-  const listingCapSummary = plannerTokens.listingCapped ? ", capped" : "";
+  const listingCapSummary = minerTokens.listingCapped ? ", capped" : "";
   const listingPriceSummary =
-    plannerTokens.listingPriceCapEth == null
+    minerTokens.listingPriceCapEth == null
       ? ""
-      : `, floor ${plannerTokens.listingFloorPriceEth} ETH, cap ${plannerTokens.listingPriceCapEth} ETH`;
+      : `, floor ${minerTokens.listingFloorPriceEth} ETH, cap ${minerTokens.listingPriceCapEth} ETH`;
   const listedSummary = args.includeListings
-    ? ` + ${plannerTokens.addedListingCount} listed tokens (${plannerTokens.listingCount} listings across ${plannerTokens.listingPages} pages${listingCapSummary}${listingPriceSummary})`
+    ? ` + ${minerTokens.addedListingCount} listed tokens (${minerTokens.listingCount} listings across ${minerTokens.listingPages} pages${listingCapSummary}${listingPriceSummary})`
     : "";
   logStatus(
     args,
-    `Loaded ${plannerTokens.ownedCount} owned tokens${listedSummary}. Search pool: ${baseStates.length}. Current best: #${currentBest.anchorTokenId} L${currentBest.level} slop ${currentBest.slopLevel} diff ${currentBest.diffCount}`,
+    `Loaded ${minerTokens.ownedCount} owned tokens${listedSummary}. Search pool: ${baseStates.length}. Current best: #${currentBest.anchorTokenId} L${currentBest.level} slop ${currentBest.slopLevel} diff ${currentBest.diffCount}`,
   );
 
-  const result = args.mode === "deep-l2" ? planDeepL2(baseStates, args) : plan(baseStates, args);
-  const elapsed = ((Date.now() - started) / 1000).toFixed(2);
+  const mineResult = await mine(baseStates, args, started);
+  ui?.finish(mineResult.best, mineResult.exitReason);
 
   if (args.json) {
-    console.log(JSON.stringify({ ...result, elapsedSeconds: Number(elapsed) }, null, 2));
+    console.log(JSON.stringify({ ...mineResult, elapsedSeconds: elapsedSeconds(started) }, null, 2));
     return;
   }
 
-  console.log("");
-  console.log("Search summary");
-  for (const row of result.levels) {
-    console.log(
-      `  L${row.inputLevel} -> L${row.outputLevel}: ${row.poolSize} states, ${row.generated} previews, kept ${row.kept}`,
-    );
-  }
-  for (const row of result.refinements) {
-    console.log(
-      `  refine L${row.level}: ${row.survivors} survivor branches x ${row.donors} donor branches, ${row.generated} previews, kept ${row.kept}`,
-    );
-  }
-
-  console.log("");
-  console.log(`Top ${result.best.length} generated paths`);
-  for (let i = 0; i < result.best.length; i++) {
-    const state = result.best[i]!;
-    console.log("");
-    console.log(
-      `${i + 1}. ${state.label}: L${state.level}, slop ${state.slopLevel}, diff ${state.diffCount}, survivor #${state.survivorTokenId}, uses ${state.tokenIds.map((id) => `#${id}`).join(", ")}`,
-    );
-    if (state.listedTokens.length > 0) {
-      const total = totalListingPriceEth(state.listedTokens);
-      const totalLabel = total == null ? "unknown total" : `${total} ETH total`;
-      console.log(`   buy listed (${totalLabel}): ${state.listedTokens.map(formatListing).join(", ")}`);
-    }
-    for (const [stepIndex, step] of state.steps.entries()) {
-      console.log(
-        `   ${stepIndex + 1}. ${step.survivor} <- ${step.donor} => ${step.result} (L${step.resultLevel}, slop ${step.slopLevel}, diff ${step.diffCount})`,
-      );
-    }
-  }
-
-  console.log("");
-  console.log(`Finished in ${elapsed}s`);
+  if (!ui) printMineResult(mineResult, started);
 }
 
 function logStatus(args: Args, message: string): void {
+  args.onProgress?.({ message });
+  if (args.onProgress) return;
   writeLogStatus(args.json, message);
 }
 
-function plan(baseStates: State[], args: Args) {
+type MineResult = {
+  ownerTokenCount: number;
+  poolSize: number;
+  passes: Array<{
+    pass: number;
+    mode: Args["mode"];
+    maxLevel: number;
+    beamSize: number;
+    generated: number;
+    best: SerializedState | null;
+    targetHit: boolean;
+  }>;
+  best: SerializedState | null;
+  target: number | null;
+  targetHit: boolean;
+  exitReason: string;
+};
+
+async function mine(baseStates: State[], args: Args, started: number): Promise<MineResult> {
+  const passes: MineResult["passes"] = [];
+  let best: SerializedState | null = null;
+  let totalGenerated = 0;
+  let pass = 0;
+
+  for (;;) {
+    pass++;
+    const profile = miningProfile(pass, args.once);
+    const passArgs: Args = {
+      ...args,
+      mode: profile.mode,
+      maxLevel: profile.maxLevel,
+      beamSize: profile.beamSize,
+      l1Frontier: profile.l1Frontier,
+      l2Budget: profile.l2Budget,
+      perAnchor: profile.perAnchor,
+      diversity: profile.diversity,
+      refineL2: profile.refineL2,
+    };
+
+    reportProgress(args, {
+      phase: profile.label,
+      pass,
+      maxLevel: profile.maxLevel,
+      totalGenerated,
+      best,
+    });
+
+    const result = passArgs.mode === "deep-l2" ? mineDeepL2(baseStates, passArgs) : mineBeam(baseStates, passArgs);
+    const generated = generatedCount(result);
+    totalGenerated += generated;
+    const passBest = result.best[0] ?? null;
+    if (passBest && (!best || compareSerializedStates(passBest, best) < 0)) {
+      best = passBest;
+      reportProgress(args, {
+        phase: "new best",
+        pass,
+        maxLevel: profile.maxLevel,
+        generated,
+        totalGenerated,
+        best,
+      });
+    }
+
+    const targetHit = Boolean(best && args.target != null && best.diffCount >= args.target);
+    passes.push({
+      pass,
+      mode: passArgs.mode,
+      maxLevel: passArgs.maxLevel,
+      beamSize: passArgs.beamSize,
+      generated,
+      best: passBest,
+      targetHit,
+    });
+
+    reportProgress(args, {
+      phase: targetHit ? "target hit" : args.once ? "complete" : "expanding",
+      pass,
+      maxLevel: profile.maxLevel,
+      generated,
+      totalGenerated,
+      best,
+      done: targetHit || args.once,
+    });
+
+    if (targetHit) {
+      return {
+        ownerTokenCount: baseStates.length,
+        poolSize: baseStates.length,
+        passes,
+        best,
+        target: args.target,
+        targetHit: true,
+        exitReason: `target ${args.target} reached`,
+      };
+    }
+    if (args.once) {
+      return {
+        ownerTokenCount: baseStates.length,
+        poolSize: baseStates.length,
+        passes,
+        best,
+        target: args.target,
+        targetHit: false,
+        exitReason: "one pass complete",
+      };
+    }
+
+    await sleep(Math.min(1_000, 200 + pass * 50));
+    if (elapsedSeconds(started) > Number.MAX_SAFE_INTEGER) break;
+  }
+
+  return {
+    ownerTokenCount: baseStates.length,
+    poolSize: baseStates.length,
+    passes,
+    best,
+    target: args.target,
+    targetHit: false,
+    exitReason: "stopped",
+  };
+}
+
+function miningProfile(pass: number, once: boolean) {
+  if (once) {
+    return {
+      label: "single mining pass",
+      mode: "deep-l2" as const,
+      maxLevel: 2,
+      beamSize: 128,
+      l1Frontier: 512,
+      l2Budget: 1_000_000,
+      perAnchor: 4,
+      diversity: 0.25,
+      refineL2: 0,
+    };
+  }
+
+  const level = Math.min(6, Math.max(1, Math.floor((pass + 1) / 2)));
+  const beamSize = Math.min(512, 64 + pass * 32);
+  const l1Frontier = Math.min(2_048, 256 + pass * 128);
+  const l2Budget = Math.min(10_000_000, 250_000 * pass);
+
+  if (pass === 1) {
+    return {
+      label: "mining level 1",
+      mode: "beam" as const,
+      maxLevel: 1,
+      beamSize,
+      l1Frontier,
+      l2Budget,
+      perAnchor: 4,
+      diversity: 0.25,
+      refineL2: 0,
+    };
+  }
+
+  if (level <= 2) {
+    return {
+      label: `mining level ${level}`,
+      mode: "deep-l2" as const,
+      maxLevel: 2,
+      beamSize,
+      l1Frontier,
+      l2Budget,
+      perAnchor: 4,
+      diversity: 0.25,
+      refineL2: 0,
+    };
+  }
+
+  return {
+    label: `mining level ${level}`,
+    mode: "beam" as const,
+    maxLevel: level,
+    beamSize,
+    l1Frontier,
+    l2Budget,
+    perAnchor: 4,
+    diversity: 0.25,
+    refineL2: Math.min(512, pass * 32),
+  };
+}
+
+function generatedCount(result: { levels: Array<{ generated: number }>; refinements: Array<{ generated: number }> }): number {
+  return (
+    result.levels.reduce((sum, row) => sum + row.generated, 0) +
+    result.refinements.reduce((sum, row) => sum + row.generated, 0)
+  );
+}
+
+function reportProgress(args: Args, progress: MinerProgress): void {
+  args.onProgress?.(progress);
+}
+
+function mineBeam(baseStates: State[], args: Args) {
   const statesByLevel = new Map<number, State[]>();
   const allLevel1States: State[] = [];
   const collectAllLevel1States = args.refineL2 > 0 && args.maxLevel >= 2;
@@ -202,16 +391,22 @@ function plan(baseStates: State[], args: Args) {
   for (let level = 0; level < args.maxLevel; level++) {
     const pool = statesByLevel.get(level) ?? [];
     if (pool.length < 2) continue;
+    reportProgress(args, { phase: `mining L${level + 1}`, level: level + 1, maxLevel: args.maxLevel, poolSize: pool.length });
 
     const candidates: State[] = [];
+    let checked = 0;
     for (let i = 0; i < pool.length; i++) {
       for (let j = i + 1; j < pool.length; j++) {
         const a = pool[i]!;
         const b = pool[j]!;
         if ((a.mask & b.mask) !== 0n) continue;
         const ab = mergeStates(a, b, ++nextId);
+        checked++;
+        if (checked % 100_000 === 0) reportProgress(args, { phase: `mining L${level + 1}`, level: level + 1, checked });
         if (stateWithinBudget(ab, args)) candidates.push(ab);
         const ba = mergeStates(b, a, ++nextId);
+        checked++;
+        if (checked % 100_000 === 0) reportProgress(args, { phase: `mining L${level + 1}`, level: level + 1, checked });
         if (stateWithinBudget(ba, args)) candidates.push(ba);
       }
     }
@@ -230,6 +425,14 @@ function plan(baseStates: State[], args: Args) {
     levels.push({
       inputLevel: level,
       outputLevel,
+      poolSize: pool.length,
+      generated: candidates.length,
+      kept: selected.length,
+    });
+    reportProgress(args, {
+      phase: `finished L${outputLevel}`,
+      level: outputLevel,
+      maxLevel: args.maxLevel,
       poolSize: pool.length,
       generated: candidates.length,
       kept: selected.length,
@@ -263,23 +466,29 @@ function plan(baseStates: State[], args: Args) {
   };
 }
 
-function planDeepL2(baseStates: State[], args: Args) {
+function mineDeepL2(baseStates: State[], args: Args) {
   const level0States = baseStates.filter((state) => state.level === 0);
   const existingLevel1States = baseStates.filter((state) => state.level === 1);
   const generatedLevel1States: State[] = [];
   const allLevel1States: State[] = [...existingLevel1States];
   let nextId = 0;
+  let l1Checked = 0;
+  reportProgress(args, { phase: "mining L1 frontier", level: 1, maxLevel: 2, poolSize: level0States.length });
 
   for (let i = 0; i < level0States.length; i++) {
     for (let j = i + 1; j < level0States.length; j++) {
       const a = level0States[i]!;
       const b = level0States[j]!;
       const ab = mergeStates(a, b, ++nextId);
+      l1Checked++;
+      if (l1Checked % 100_000 === 0) reportProgress(args, { phase: "mining L1 frontier", level: 1, checked: l1Checked });
       if (stateWithinBudget(ab, args)) {
         generatedLevel1States.push(ab);
         allLevel1States.push(ab);
       }
       const ba = mergeStates(b, a, ++nextId);
+      l1Checked++;
+      if (l1Checked % 100_000 === 0) reportProgress(args, { phase: "mining L1 frontier", level: 1, checked: l1Checked });
       if (stateWithinBudget(ba, args)) {
         generatedLevel1States.push(ba);
         allLevel1States.push(ba);
@@ -289,6 +498,13 @@ function planDeepL2(baseStates: State[], args: Args) {
 
   const l1Frontier = selectBeam(allLevel1States, args.l1Frontier, args.perAnchor, args.diversity);
   const donors = uniqueDonorStates(allLevel1States);
+  reportProgress(args, {
+    phase: "mining L2",
+    level: 2,
+    maxLevel: 2,
+    generated: generatedLevel1States.length,
+    kept: l1Frontier.length,
+  });
   const topL2 = new TopStates(Math.max(args.beamSize, args.top * 16));
   const scratch = new Uint8Array(l1Frontier[0]?.embedding.length ?? 0);
   const possibleBranches = l1Frontier.length * donors.length;
@@ -309,7 +525,13 @@ function planDeepL2(baseStates: State[], args: Args) {
 
       generated++;
       if (generated % progressEvery === 0) {
-        logStatus(args, `Deep L2 scanned ${generated} valid previews (${branchesVisited}/${possibleBranches} branches visited)`);
+        reportProgress(args, {
+          phase: "mining L2",
+          level: 2,
+          checked: generated,
+          possible: possibleBranches,
+          generated,
+        });
       }
 
       blendEmbeddingsInto(survivor.embedding, donor.embedding, scratch);
@@ -744,6 +966,9 @@ function parseArgs(argv: string[]): Args {
     perAnchor: 4,
     diversity: 0.25,
     refineL2: 0,
+    target: null,
+    once: false,
+    tui: true,
     top: 10,
     json: false,
   };
@@ -760,64 +985,25 @@ function parseArgs(argv: string[]): Args {
         args.api = normalizeApiUrl(requireValue(arg, next));
         i++;
         break;
-      case "--mode":
-        args.mode = parseMode(requireValue(arg, next), arg);
-        i++;
-        break;
-      case "--include-listings":
+      case "--listings":
         args.includeListings = true;
+        args.maxListingFloorMultiple ??= DEFAULT_LISTING_FLOOR_MULTIPLE;
         break;
-      case "--listing-delay-ms":
-        args.listingDelayMs = parseNonNegativeInt(requireValue(arg, next), arg);
-        i++;
-        break;
-      case "--max-listing-pages":
+      case "--budget":
         args.includeListings = true;
-        args.maxListingPages = parseNonNegativeInt(requireValue(arg, next), arg);
-        i++;
-        break;
-      case "--max-listing-price-eth":
-        args.includeListings = true;
-        args.maxListingPriceEth = parseNonNegativeNumber(requireValue(arg, next), arg);
-        i++;
-        break;
-      case "--max-listing-floor-multiple":
-        args.includeListings = true;
-        args.maxListingFloorMultiple = parseNonNegativeNumber(requireValue(arg, next), arg);
-        i++;
-        break;
-      case "--max-total-listing-price-eth":
-        args.includeListings = true;
+        args.maxListingFloorMultiple ??= DEFAULT_LISTING_FLOOR_MULTIPLE;
         args.maxTotalListingPriceEth = parseNonNegativeNumber(requireValue(arg, next), arg);
         i++;
         break;
-      case "--max-level":
-        args.maxLevel = parsePositiveInt(requireValue(arg, next), arg);
+      case "--target":
+        args.target = parseDiffTarget(requireValue(arg, next), arg);
         i++;
         break;
-      case "--beam-size":
-        args.beamSize = parsePositiveInt(requireValue(arg, next), arg);
-        i++;
+      case "--once":
+        args.once = true;
         break;
-      case "--l1-frontier":
-        args.l1Frontier = parsePositiveInt(requireValue(arg, next), arg);
-        i++;
-        break;
-      case "--l2-budget":
-        args.l2Budget = parseNonNegativeInt(requireValue(arg, next), arg);
-        i++;
-        break;
-      case "--per-anchor":
-        args.perAnchor = parseNonNegativeInt(requireValue(arg, next), arg);
-        i++;
-        break;
-      case "--diversity":
-        args.diversity = parseRatio(requireValue(arg, next), arg);
-        i++;
-        break;
-      case "--refine-l2":
-        args.refineL2 = parseNonNegativeInt(requireValue(arg, next), arg);
-        i++;
+      case "--no-tui":
+        args.tui = false;
         break;
       case "--top":
         args.top = parsePositiveInt(requireValue(arg, next), arg);
@@ -898,15 +1084,15 @@ function totalListingPriceEth(listings: ListingInfo[]): number | null {
   return Number(total.toFixed(8));
 }
 
-function normalizePlannerArgs(argv: string[]): string[] {
-  if (argv[0] === "plan") return argv.slice(1);
-  if (argv[0] === "slop" && argv[1] === "plan") return argv.slice(2);
+function normalizeMineArgs(argv: string[]): string[] {
+  if (argv[0] === "mine") return argv.slice(1);
   return argv;
 }
 
-function parseMode(raw: string, name: string): Args["mode"] {
-  if (raw === "beam" || raw === "deep-l2") return raw;
-  throw new Error(`${name} must be beam or deep-l2`);
+function parseDiffTarget(raw: string, name: string): number {
+  const value = Number(raw);
+  if (!Number.isInteger(value) || value < 0 || value > 576) throw new Error(`${name} must be an integer from 0 to 576`);
+  return value;
 }
 
 class TopStates {
@@ -957,34 +1143,137 @@ function compareCandidate(
   );
 }
 
+function compareSerializedStates(a: SerializedState, b: SerializedState): number {
+  return (
+    b.slopLevel - a.slopLevel ||
+    b.diffCount - a.diffCount ||
+    b.level - a.level ||
+    a.tokenIds.length - b.tokenIds.length ||
+    a.survivorTokenId - b.survivorTokenId
+  );
+}
+
+function printMineResult(result: MineResult, started: number): void {
+  console.log("");
+  console.log(`Mining stopped: ${result.exitReason}`);
+  console.log(`Elapsed: ${elapsedSeconds(started)}s`);
+  console.log(`Passes: ${result.passes.length}`);
+  if (result.best) {
+    console.log("");
+    printState(result.best, 1);
+  }
+}
+
+function printState(state: SerializedState, rank: number): void {
+  console.log(
+    `${rank}. ${state.label}: L${state.level}, slop ${state.slopLevel}, diff ${state.diffCount}, survivor #${state.survivorTokenId}, uses ${state.tokenIds.map((id) => `#${id}`).join(", ")}`,
+  );
+  if (state.listedTokens.length > 0) {
+    const total = totalListingPriceEth(state.listedTokens);
+    const totalLabel = total == null ? "unknown total" : `${total} ETH total`;
+    console.log(`   buy listed (${totalLabel}): ${state.listedTokens.map(formatListing).join(", ")}`);
+  }
+  for (const [stepIndex, step] of state.steps.entries()) {
+    console.log(
+      `   ${stepIndex + 1}. ${step.survivor} <- ${step.donor} => ${step.result} (L${step.resultLevel}, slop ${step.slopLevel}, diff ${step.diffCount})`,
+    );
+  }
+}
+
+function elapsedSeconds(started: number): number {
+  return Number(((Date.now() - started) / 1000).toFixed(2));
+}
+
+class MinerUi {
+  private progress: MinerProgress = {};
+  private best: SerializedState | null = null;
+  private lastRender = 0;
+  private finished = false;
+
+  constructor(
+    private readonly args: Args,
+    private readonly started: number,
+  ) {
+    process.stdout.write("\x1b[?25l");
+    process.once("exit", () => process.stdout.write("\x1b[?25h"));
+  }
+
+  update(progress: MinerProgress): void {
+    this.progress = { ...this.progress, ...progress };
+    if (progress.best !== undefined) this.best = progress.best;
+    const now = Date.now();
+    if (!progress.done && now - this.lastRender < 100) return;
+    this.lastRender = now;
+    this.render();
+  }
+
+  finish(best: SerializedState | null, reason: string): void {
+    this.best = best;
+    this.progress = { ...this.progress, phase: reason, done: true };
+    this.finished = true;
+    this.render();
+    process.stdout.write("\x1b[?25h");
+    process.stdout.write("\n");
+  }
+
+  private render(): void {
+    const best = this.best;
+    const target = this.args.target == null ? "none" : String(this.args.target);
+    const listings = this.args.includeListings ? "on" : "off";
+    const budget = this.args.maxTotalListingPriceEth == null ? "none" : `${this.args.maxTotalListingPriceEth} ETH`;
+    const lines = [
+      "+------------------------------------------------------------+",
+      "| Slonks Miner                                               |",
+      "+------------------------------------------------------------+",
+      `Owner     ${shortAddress(this.args.owner)}`,
+      `Target    ${target}    Listings ${listings}    Budget ${budget}`,
+      `Elapsed   ${elapsedSeconds(this.started)}s    Pass ${this.progress.pass ?? 0}    Phase ${this.progress.phase ?? "starting"}`,
+      `Level     ${this.progress.level ?? "-"} / ${this.progress.maxLevel ?? "-"}    Pool ${this.progress.poolSize ?? "-"}`,
+      `Checked   ${formatNumber(this.progress.checked)}    Generated ${formatNumber(this.progress.generated)}    Total ${formatNumber(this.progress.totalGenerated)}`,
+      `Kept      ${formatNumber(this.progress.kept)}    Possible ${formatNumber(this.progress.possible)}`,
+      "",
+      "Best",
+      best ? `  diff ${best.diffCount}  slop ${best.slopLevel}  level ${best.level}  survivor #${best.survivorTokenId}` : "  none yet",
+      best ? `  uses ${best.tokenIds.map((id) => `#${id}`).join(", ")}` : "",
+      best && best.listedTokens.length > 0 ? `  buys ${best.listedTokens.map(formatListing).join(", ")}` : "",
+      "",
+      this.progress.message ? `Status: ${this.progress.message}` : "Status: mining uses local compute; Ctrl-C to stop",
+      this.finished ? "" : "Tip: add --target N to stop automatically when a diff target is found",
+    ].filter((line) => line !== "");
+
+    process.stdout.write("\x1b[H\x1b[J");
+    process.stdout.write(`${lines.join("\n")}\n`);
+  }
+}
+
+function shortAddress(address: string): string {
+  if (address.length <= 12) return address;
+  return `${address.slice(0, 6)}...${address.slice(-4)}`;
+}
+
+function formatNumber(value: number | undefined): string {
+  if (value == null) return "-";
+  return value.toLocaleString("en-US");
+}
+
 function usage() {
   console.log(`Usage:
-  slonks plan --owner 0x... [options]
-  bun run slop:plan -- --owner 0x... [options]
+  slonks mine --owner 0x... [options]
 
 Options:
-  --api URL          API base URL, default ${DEFAULT_API}
-  --mode MODE        Search mode: beam or deep-l2, default beam
-  --include-listings Include all currently listed Slonks in the search pool
-  --listing-delay-ms N Delay between listing pages, default ${DEFAULT_LISTING_DELAY_MS}
-  --max-listing-pages N Listing page cap for testing, default 0 means all pages
-  --max-listing-price-eth N Skip listed tokens above this ETH price
-  --max-listing-floor-multiple N Skip listed tokens above N x current floor price
-  --max-total-listing-price-eth N Skip paths whose listed-token total exceeds this ETH price
-  --max-level N     Highest result merge level to search, default 4
-  --beam-size N     States to keep per generated level, default 32
-  --l1-frontier N   L1 survivor frontier for deep-l2 mode, default ${DEFAULT_L1_FRONTIER}
-  --l2-budget N     Valid L2 previews to scan in deep-l2 mode, default ${DEFAULT_L2_BUDGET}; 0 means no cap
-  --per-anchor N    Diversity cap per survivor anchor inside beam, default 4
-  --diversity N     Fraction of each beam reserved for embedding diversity, default 0.25
-  --refine-l2 N     Exact L2 donor scan for top N L1 survivor branches, default 0
-  --top N           Number of paths to print, default 10
-  --json            Print JSON
+  --owner 0x...   Holder address to mine from
+  --target N      Stop when a path reaches diff count N
+  --listings      Include listed Slonks up to ${DEFAULT_LISTING_FLOOR_MULTIPLE}x floor
+  --budget ETH    Include listings, but only show paths at or below this total ETH spend
+  --once          Run one strong mining pass and exit
+  --top N         Number of paths to keep/show, default 10
+  --json          Print final JSON; requires --once or --target
+  --api URL       API base URL, default ${DEFAULT_API}
 `);
 }
 
 if (import.meta.main) {
-  runSlopPlanner().catch((err) => {
+  runSlopMiner().catch((err) => {
     console.error(err instanceof Error ? err.message : err);
     process.exit(1);
   });
