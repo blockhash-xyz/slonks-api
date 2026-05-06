@@ -3,6 +3,7 @@ import { and, asc, eq, isNotNull, sql, type SQL } from "drizzle-orm";
 import { getAddress, type Address } from "viem";
 import { db } from "../../db/client.ts";
 import { tokens } from "../../db/schema.ts";
+import { CACHE, setCache } from "../cache.ts";
 
 export const holders = new Hono();
 
@@ -47,7 +48,7 @@ holders.get("/", async (c) => {
   const hasMore = rows.length > limit;
   const visibleRows = hasMore ? rows.slice(0, limit) : rows;
 
-  c.header("Cache-Control", "public, s-maxage=30, stale-while-revalidate=120");
+  setCache(c, CACHE.owner);
   return c.json({
     chainId: 1,
     items: visibleRows.map((row) => ({

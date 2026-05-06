@@ -3,6 +3,7 @@ import { and, asc, eq, sql } from "drizzle-orm";
 import { isAddress, getAddress } from "viem";
 import { db } from "../../db/client.ts";
 import { tokens, sourcePunks } from "../../db/schema.ts";
+import { CACHE, setCache } from "../cache.ts";
 import { includeParam, tokenListDto } from "../dto.ts";
 
 export const owners = new Hono();
@@ -39,7 +40,7 @@ owners.get("/:address/tokens", async (c) => {
     .where(and(eq(tokens.exists, true), eq(tokens.owner, lower)))
     .orderBy(asc(tokens.tokenId));
 
-  c.header("Cache-Control", "public, s-maxage=30, stale-while-revalidate=120");
+  setCache(c, CACHE.owner);
   return c.json({
     chainId: 1,
     owner: getAddress(address),
@@ -71,6 +72,7 @@ owners.get("/:address/summary", async (c) => {
     .groupBy(tokens.mergeLevel)
     .orderBy(tokens.mergeLevel);
 
+  setCache(c, CACHE.owner);
   return c.json({
     chainId: 1,
     owner: getAddress(address),

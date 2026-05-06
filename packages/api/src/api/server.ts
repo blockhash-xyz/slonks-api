@@ -1,7 +1,9 @@
 import { Hono } from "hono";
 import { cors } from "hono/cors";
+import { etag } from "hono/etag";
 import { logger } from "hono/logger";
 import { corsOrigins } from "../env.ts";
+import { responseCache, setNoStore } from "./cache.ts";
 import { health } from "./routes/health.ts";
 import { collection } from "./routes/collection.ts";
 import { tokens } from "./routes/tokens.ts";
@@ -22,6 +24,8 @@ export function buildApp() {
       allowMethods: ["GET", "POST", "OPTIONS"],
     }),
   );
+  app.use("*", responseCache());
+  app.use("*", etag());
 
   app.route("/health", health);
   app.route("/collection", collection);
@@ -33,9 +37,13 @@ export function buildApp() {
   app.route("/listings", listings);
   app.route("/holders", holders);
 
-  app.notFound((c) => c.json({ error: "not found" }, 404));
+  app.notFound((c) => {
+    setNoStore(c);
+    return c.json({ error: "not found" }, 404);
+  });
   app.onError((err, c) => {
     console.error("api error:", err);
+    setNoStore(c);
     return c.json({ error: err.message ?? "internal error" }, 500);
   });
   return app;

@@ -3,6 +3,7 @@ import { and, desc, eq, inArray, lt, or, type SQL } from "drizzle-orm";
 import { isAddress } from "viem";
 import { db } from "../../db/client.ts";
 import { merges, tokens, transfers } from "../../db/schema.ts";
+import { CACHE, setCache } from "../cache.ts";
 import { mergeDto, transferDto } from "../dto.ts";
 
 export const activity = new Hono();
@@ -104,6 +105,7 @@ activity.get("/", async (c) => {
   const last = trimmed[trimmed.length - 1] ?? null;
   const nextCursor = hasMore && last ? `${last.blockNumber.toString()}:${last.logIndex}` : null;
 
+  setCache(c, CACHE.activity);
   return c.json({
     items: trimmed.map((item) => {
       return item.kind === "transfer"

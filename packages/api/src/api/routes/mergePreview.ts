@@ -1,4 +1,5 @@
 import { Hono } from "hono";
+import { CACHE, setCache } from "../cache.ts";
 import { computeMergePreviews } from "../mergePreviewCore.ts";
 
 export const mergePreview = new Hono();
@@ -21,7 +22,7 @@ mergePreview.post("/", async (c) => {
     return c.json(errorBody, status as 400 | 404 | 409);
   }
 
-  c.header("Cache-Control", "public, s-maxage=30, stale-while-revalidate=120");
+  setCache(c, CACHE.preview);
   return c.json(items[0]);
 });
 

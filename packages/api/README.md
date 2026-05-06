@@ -67,7 +67,27 @@ locally from the bundled model weights.
   - `slopMask`: 72 bytes.
 - Most list endpoints use `page`, `limit`, `hasMore`, and `nextPage`.
 - `/activity` uses cursor pagination with `nextCursor`.
+- Cacheable `GET` responses include `Cache-Control`, `CDN-Cache-Control`,
+  `ETag`, `Vary: Origin`, and `X-Slonks-Cache` headers.
 - Errors are shaped like `{ "error": "message" }`.
+
+## Caching
+
+The API is built to sit behind an edge cache and also keeps a bounded in-process
+microcache on the Fly `web` machine for repeated `GET` requests. Cacheable
+responses use `max-age=0` for browsers, `s-maxage`/`CDN-Cache-Control` for
+shared caches, `stale-while-revalidate`, and `stale-if-error`.
+
+Current shared-cache TTLs:
+
+- Collection status: 15 seconds.
+- Token snapshots, bulk token snapshots, history, and lineage: 60 seconds.
+- Token lists, owner endpoints, and holders: 30 seconds.
+- Activity feed: 5 seconds.
+- OpenSea listings: 20 seconds.
+
+`X-Slonks-Cache` is `MISS`, `HIT`, or `BYPASS` for the API's in-process cache.
+Health checks and upstream listing errors use `no-store`.
 
 ## Data Shapes
 

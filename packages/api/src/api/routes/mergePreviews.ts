@@ -1,4 +1,5 @@
 import { Hono } from "hono";
+import { CACHE, setCache } from "../cache.ts";
 import { computeMergePreviews, type MergePreviewPair } from "../mergePreviewCore.ts";
 
 export const mergePreviews = new Hono();
@@ -22,7 +23,7 @@ mergePreviews.post("/", async (c) => {
   }
 
   const { items, errors } = await computeMergePreviews(pairs);
-  c.header("Cache-Control", "public, s-maxage=30, stale-while-revalidate=120");
+  setCache(c, CACHE.preview);
   return c.json({ chainId: 1, items, errors, count: items.length, errorCount: errors.length });
 });
 

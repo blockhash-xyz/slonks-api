@@ -3,6 +3,7 @@ import { sql, eq } from "drizzle-orm";
 import { db } from "../../db/client.ts";
 import { collectionState, tokens } from "../../db/schema.ts";
 import { buildCollectionStatus } from "../../lib/snapshot.ts";
+import { CACHE, setCache } from "../cache.ts";
 
 export const collection = new Hono();
 
@@ -24,7 +25,7 @@ async function readState() {
 
 collection.get("/status", async (c) => {
   const row = await readState();
-  c.header("Cache-Control", "public, s-maxage=15, stale-while-revalidate=60");
+  setCache(c, CACHE.collectionStatus);
   return c.json(buildCollectionStatus(row));
 });
 
@@ -60,6 +61,6 @@ collection.get("/distributions", async (c) => {
     `),
   ]);
 
-  c.header("Cache-Control", "public, s-maxage=60, stale-while-revalidate=300");
+  setCache(c, CACHE.collectionStats);
   return c.json({ byMergeLevel, bySlopLevel, byType });
 });

@@ -4,6 +4,7 @@ import { env } from "../../env.ts";
 import { db } from "../../db/client.ts";
 import { collectionState, sourcePunks, tokens } from "../../db/schema.ts";
 import { buildTokenSnapshot, type TokenSnapshot } from "../../lib/snapshot.ts";
+import { CACHE, setCache, setNoStore } from "../cache.ts";
 import { includeParam } from "../dto.ts";
 
 type OpenSeaListing = {
@@ -41,6 +42,7 @@ listings.get("/", async (c) => {
 
   const apiKey = env.OPENSEA_API_KEY;
   if (!apiKey) {
+    setNoStore(c);
     return c.json({
       chainId,
       enabled: false,
@@ -60,6 +62,7 @@ listings.get("/", async (c) => {
   try {
     const res = await fetchWithTimeout(url, apiKey);
     if (!res.ok) {
+      setNoStore(c);
       return c.json({ chainId, enabled: true, slug, chain: OS_CHAIN[chainId], error: `opensea ${res.status}`, listings: [] });
     }
 
@@ -86,9 +89,10 @@ listings.get("/", async (c) => {
       response.tokens = await snapshotsByTokenId(normalized.map((listing) => listing.tokenId));
     }
 
-    c.header("Cache-Control", "public, s-maxage=30, stale-while-revalidate=120");
+    setCache(c, CACHE.listings);
     return c.json(response);
   } catch (err) {
+    setNoStore(c);
     return c.json(
       {
         chainId,
