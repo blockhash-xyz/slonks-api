@@ -8,6 +8,7 @@ import type { CollectionStateRow, SourcePunkRow, TokenRow } from "../db/schema.t
 export type TokenSnapshot = {
   chainId: 1;
   tokenId: string;
+  status: "active" | "burned";
   exists: boolean;
   owner: Address | null;
   revealed: boolean;
@@ -45,17 +46,21 @@ export function buildTokenSnapshot(
 
   const revealed = collection.revealed;
   const exists = token.exists;
+  const status = exists ? "active" : "burned";
   const owner = token.owner ? toChecksum(token.owner) : null;
 
   const generatedBytes = token.generatedPixels ?? source?.generatedPixels ?? null;
   const originalBytes = source?.originalRgba ?? null;
   const embeddingBytes = token.mergeEmbedding ?? source?.sourceEmbedding ?? null;
 
-  const showSource = exists && revealed && token.sourceId != null && source != null;
+  const showSource = revealed && token.sourceId != null && source != null;
+  const slop = token.slop ?? (token.mergeLevel === 0 ? source?.baseSlop : null) ?? null;
+  const slopLevel = token.slopLevel ?? (token.mergeLevel === 0 ? source?.baseSlopLevel : null) ?? null;
 
   return {
     chainId: 1,
     tokenId: token.tokenId.toString(),
+    status,
     exists,
     owner,
     revealed,
@@ -67,8 +72,8 @@ export function buildTokenSnapshot(
     embedding: embeddingBytes && showSource ? bytesToHex(embeddingBytes) : null,
     generatedPixels: showSource && generatedBytes ? bytesToHex(generatedBytes) : null,
     originalRgba: showSource && originalBytes ? bytesToHex(originalBytes) : null,
-    slop: showSource ? token.slop ?? null : null,
-    slopLevel: showSource ? token.slopLevel ?? null : null,
+    slop: showSource ? slop : null,
+    slopLevel: showSource ? slopLevel : null,
   };
 }
 

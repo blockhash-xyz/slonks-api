@@ -7,6 +7,7 @@ describe("API DTO helpers", () => {
       tokenListDto(
         {
           tokenId: 7,
+          exists: true,
           owner: "0xabc",
           sourceId: 1,
           baseSourceId: 2,
@@ -20,6 +21,7 @@ describe("API DTO helpers", () => {
       ),
     ).toEqual({
       tokenId: 7,
+      status: "active",
       owner: "0xabc",
       sourceId: 1,
       baseSourceId: 2,
@@ -36,6 +38,7 @@ describe("API DTO helpers", () => {
       tokenListDto(
         {
           tokenId: 8,
+          exists: false,
           sourceId: null,
           baseSourceId: null,
           mergeLevel: 1,
@@ -51,6 +54,7 @@ describe("API DTO helpers", () => {
       ),
     ).toMatchObject({
       tokenId: 8,
+      status: "burned",
       generatedPixels: "0x0102",
       originalRgba: "0x0506",
     });

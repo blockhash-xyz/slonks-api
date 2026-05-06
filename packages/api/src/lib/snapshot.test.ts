@@ -52,6 +52,7 @@ describe("buildTokenSnapshot", () => {
     expect(buildTokenSnapshot(token, source, collection)).toMatchObject({
       chainId: 1,
       tokenId: "1",
+      status: "active",
       exists: true,
       owner: "0x2052051A0474fB0B98283b3F38C13b0B0B6a3677",
       revealed: true,
@@ -68,19 +69,40 @@ describe("buildTokenSnapshot", () => {
     });
   });
 
-  test("hides source data unless token exists, collection is revealed, and source is ready", () => {
+  test("returns burned tokens with source-backed visual data", () => {
     expect(
-      buildTokenSnapshot({ ...token, exists: false, owner: "not-an-address" }, source, collection),
+      buildTokenSnapshot(
+        {
+          ...token,
+          exists: false,
+          owner: null,
+          mergeLevel: 0,
+          mergeEmbedding: null,
+          generatedPixels: null,
+          slop: null,
+          slopLevel: null,
+        },
+        source,
+        collection,
+      ),
     ).toMatchObject({
+      status: "burned",
       exists: false,
+      owner: null,
+      sourceId: 20,
+      punkAttributesText: "Male, Hoodie",
+      attributes: [{ trait_type: "Type", value: "Male" }],
+      embedding: "0x0304",
+      generatedPixels: "0x0506",
+      originalRgba: "0x0102",
+      slop: 10,
+      slopLevel: 0,
+    });
+  });
+
+  test("hides source data unless collection is revealed and source is ready", () => {
+    expect(buildTokenSnapshot({ ...token, owner: "not-an-address" }, source, collection)).toMatchObject({
       owner: "not-an-address",
-      sourceId: null,
-      attributes: [],
-      embedding: null,
-      generatedPixels: null,
-      originalRgba: null,
-      slop: null,
-      slopLevel: null,
     });
     expect(buildTokenSnapshot(token, null, collection)).toMatchObject({ sourceId: null, embedding: null });
     expect(buildTokenSnapshot(token, source, { ...collection, revealed: false })).toMatchObject({

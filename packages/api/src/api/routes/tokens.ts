@@ -127,6 +127,7 @@ tokens_route.get("/", async (c) => {
 
   const selectFields = {
     tokenId: tokens.tokenId,
+    exists: tokens.exists,
     owner: tokens.owner,
     sourceId: tokens.sourceId,
     baseSourceId: tokens.baseSourceId,

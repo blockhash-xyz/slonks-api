@@ -15,6 +15,7 @@ owners.get("/:address/tokens", async (c) => {
 
   const selectFields = {
     tokenId: tokens.tokenId,
+    exists: tokens.exists,
     sourceId: tokens.sourceId,
     baseSourceId: tokens.baseSourceId,
     mergeLevel: tokens.mergeLevel,

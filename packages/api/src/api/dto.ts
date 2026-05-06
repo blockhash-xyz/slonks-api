@@ -3,6 +3,7 @@ import type { MergeRow, TransferRow } from "../db/schema.ts";
 
 export type TokenListRow = {
   tokenId: number;
+  exists?: boolean;
   owner?: string | null;
   sourceId: number | null;
   baseSourceId: number | null;
@@ -21,6 +22,7 @@ export function tokenListDto(row: TokenListRow, includePixels: boolean) {
     tokenId: row.tokenId,
   };
 
+  if ("exists" in row) item.status = row.exists ? "active" : "burned";
   if ("owner" in row) item.owner = row.owner;
 
   Object.assign(item, {

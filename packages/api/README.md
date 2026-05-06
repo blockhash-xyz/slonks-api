@@ -79,6 +79,7 @@ Returned by `GET /tokens/:id`, `GET /tokens?ids=...`, listing token embeds, and 
 type TokenSnapshot = {
   chainId: 1;
   tokenId: string;
+  status: "active" | "burned";
   exists: boolean;
   owner: string | null;
   revealed: boolean;
@@ -102,6 +103,7 @@ Returned by `GET /tokens` and `GET /owners/:address/tokens`.
 ```ts
 type TokenListItem = {
   tokenId: number;
+  status: "active" | "burned";
   owner?: string | null;
   sourceId: number | null;
   baseSourceId: number | null;
@@ -158,7 +160,9 @@ Returns:
 
 ### `GET /tokens/:id`
 
-Full token snapshot.
+Full token snapshot. Burned tokens return `200` with `status: "burned"`,
+`exists: false`, `owner: null`, and their revealed source-backed visual data
+when available.
 
 Example:
 
@@ -245,6 +249,7 @@ Returns:
 
 type MergeTreeNode = {
   tokenId: number;
+  status: "active" | "burned";
   exists: boolean;
   owner: string | null;
   sourceId: number | null;

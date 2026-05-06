@@ -34,6 +34,7 @@ type MergeTreeStep = {
 
 type MergeTreeNode = {
   tokenId: number;
+  status: "active" | "burned";
   exists: boolean;
   owner: string | null;
   sourceId: number | null;
@@ -166,6 +167,7 @@ function buildNode(tokenId: number, cutoffOrder: number, context: BuildContext, 
   stack.delete(tokenId);
   return {
     tokenId,
+    status: token?.exists ? "active" : "burned",
     exists: token?.exists ?? false,
     owner: token?.owner ?? null,
     sourceId: token?.sourceId ?? null,
