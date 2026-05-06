@@ -1,9 +1,8 @@
 import { Hono } from "hono";
 import { cors } from "hono/cors";
-import { etag } from "hono/etag";
 import { logger } from "hono/logger";
 import { corsOrigins } from "../env.ts";
-import { responseCache, setNoStore } from "./cache.ts";
+import { conditionalEtag, responseCache, setNoStore } from "./cache.ts";
 import { health } from "./routes/health.ts";
 import { collection } from "./routes/collection.ts";
 import { tokens } from "./routes/tokens.ts";
@@ -25,7 +24,7 @@ export function buildApp() {
     }),
   );
   app.use("*", responseCache());
-  app.use("*", etag());
+  app.use("*", conditionalEtag());
 
   app.route("/health", health);
   app.route("/collection", collection);

@@ -73,8 +73,10 @@ locally from the bundled model weights.
 
 ## Caching
 
-The API is built to sit behind an edge cache and also keeps a bounded in-process
-microcache on the Fly `web` machine for repeated `GET` requests. Cacheable
+The API is built to sit behind an edge cache and also keeps a small bounded
+in-process microcache on the Fly `web` machine for predictable lightweight
+`GET` requests. Pixel-heavy lists, bulk token fetches, owner token lists, and
+OpenSea listing pages are intentionally not stored in process memory. Cacheable
 responses use `max-age=0` for browsers, `s-maxage`/`CDN-Cache-Control` for
 shared caches, `stale-while-revalidate`, and `stale-if-error`.
 

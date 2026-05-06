@@ -1,4 +1,5 @@
 import type { Context, MiddlewareHandler } from "hono";
+import { etag } from "hono/etag";
 
 type CachePolicy = {
   sMaxage: number;
@@ -23,9 +24,9 @@ type ResponseCacheOptions = {
   now?: () => number;
 };
 
-const DEFAULT_MAX_ENTRIES = 2_000;
-const DEFAULT_MAX_BYTES = 128 * 1024 * 1024;
-const DEFAULT_MAX_RESPONSE_BYTES = 2 * 1024 * 1024;
+const DEFAULT_MAX_ENTRIES = 500;
+const DEFAULT_MAX_BYTES = 16 * 1024 * 1024;
+const DEFAULT_MAX_RESPONSE_BYTES = 64 * 1024;
 
 export const CACHE = {
   collectionStatus: { sMaxage: 15, staleWhileRevalidate: 60, staleIfError: 300 },
@@ -88,6 +89,13 @@ export function responseCache(options: ResponseCacheOptions = {}): MiddlewareHan
       return;
     }
 
+    if (!isMicrocacheCandidate(c)) {
+      await next();
+      guardUncacheableResponse(c.res);
+      c.res.headers.set("X-Slonks-Cache", "BYPASS");
+      return;
+    }
+
     const key = c.req.url;
     const cached = entries.get(key);
     const currentTime = now();
@@ -126,6 +134,17 @@ export function responseCache(options: ResponseCacheOptions = {}): MiddlewareHan
   };
 }
 
+export function conditionalEtag(): MiddlewareHandler {
+  const middleware = etag();
+  return async (c, next) => {
+    if (c.req.method !== "GET" || !isMicrocacheCandidate(c)) {
+      await next();
+      return;
+    }
+    return middleware(c, next);
+  };
+}
+
 function cachedResponse(c: Context, entry: CacheEntry, now: number): Response {
   const headers = new Headers(entry.headers);
   headers.set("Age", String(Math.max(0, Math.floor((now - entry.storedAt) / 1_000))));
@@ -159,10 +178,35 @@ function guardUncacheableResponse(res: Response): void {
   }
 }
 
+function isMicrocacheCandidate(c: Context): boolean {
+  const url = new URL(c.req.url);
+  const path = url.pathname;
+
+  if (path === "/collection/status" || path === "/collection/distributions" || path === "/holders") {
+    return true;
+  }
+
+  if (/^\/tokens\/\d+$/.test(path)) return true;
+  if (/^\/owners\/[^/]+\/summary$/.test(path)) return true;
+
+  if (path === "/tokens") {
+    if (url.searchParams.has("ids")) return false;
+    if (includeParam(url.searchParams.get("include"), "pixels")) return false;
+    return true;
+  }
+
+  return false;
+}
+
 function sMaxage(header: string | null): number {
   if (!header) return 0;
   const match = /(?:^|,)\s*s-maxage=(\d+)\s*(?:,|$)/i.exec(header);
   return match ? Number(match[1]) : 0;
+}
+
+function includeParam(raw: string | null, value: string): boolean {
+  if (!raw) return false;
+  return raw.split(",").some((part) => part.trim().toLowerCase() === value);
 }
 
 function appendVary(c: Context, value: string): void {
