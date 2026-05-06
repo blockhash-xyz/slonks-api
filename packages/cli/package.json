@@ -1,10 +1,10 @@
 {
   "name": "@blockhash/slonks",
-  "version": "0.1.3",
+  "version": "0.1.4",
   "description": "Command-line tools for Slonks.",
   "type": "module",
   "bin": {
-    "slonks": "./src/cli/slonks.ts"
+    "slonks": "src/cli/slonks.ts"
   },
   "scripts": {
     "test": "cd ../.. && bun test packages/cli"
