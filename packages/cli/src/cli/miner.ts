@@ -22,7 +22,7 @@ type TokenSnapshot = {
   mergeLevel: number;
   embedding: `0x${string}` | null;
   originalRgba: `0x${string}` | null;
-  diffCount: number | null;
+  slop: number | null;
   slopLevel: number | null;
 };
 
@@ -59,7 +59,7 @@ type PlanStep = {
   donor: string;
   result: string;
   resultLevel: number;
-  diffCount: number;
+  slop: number;
   slopLevel: number;
 };
 
@@ -72,7 +72,7 @@ type State = {
   embedding: Uint8Array;
   embeddingKey: string;
   originalRgba: Uint8Array;
-  diffCount: number;
+  slop: number;
   slopLevel: number;
   steps: PlanStep[];
   listedTokens: ListingInfo[];
@@ -158,7 +158,7 @@ export async function runSlopMiner(argv = process.argv.slice(2)) {
     : "";
   logStatus(
     args,
-    `Loaded ${minerTokens.ownedCount} owned tokens${listedSummary}. Search pool: ${baseStates.length}. Current best: #${currentBest.anchorTokenId} L${currentBest.level} slop ${currentBest.slopLevel} diff ${currentBest.diffCount}`,
+    `Loaded ${minerTokens.ownedCount} owned tokens${listedSummary}. Search pool: ${baseStates.length}. Current best: #${currentBest.anchorTokenId} merge L${currentBest.level} slop ${currentBest.slop} slop level ${currentBest.slopLevel}`,
   );
 
   const mineResult = await mine(baseStates, args, started);
@@ -241,7 +241,7 @@ async function mine(baseStates: State[], args: Args, started: number): Promise<M
       });
     }
 
-    const targetHit = Boolean(best && args.target != null && best.diffCount >= args.target);
+    const targetHit = Boolean(best && args.target != null && best.slop >= args.target);
     passes.push({
       pass,
       mode: passArgs.mode,
@@ -589,7 +589,7 @@ function mergeStates(survivor: State, donor: State, id: number): State {
     embedding,
     embeddingKey: embeddingKey(embedding),
     originalRgba: survivor.originalRgba,
-    diffCount: diff.count,
+    slop: diff.count,
     slopLevel: diff.slopLevel,
     listedTokens: mergeListings(survivor.listedTokens, donor.listedTokens),
     steps: [
@@ -600,7 +600,7 @@ function mergeStates(survivor: State, donor: State, id: number): State {
         donor: donor.label,
         result: label,
         resultLevel: survivor.level + 1,
-        diffCount: diff.count,
+        slop: diff.count,
         slopLevel: diff.slopLevel,
       },
     ],
@@ -658,7 +658,7 @@ function mergeStatesWithDiff(
     embedding,
     embeddingKey: embeddingKey(embedding),
     originalRgba: survivor.originalRgba,
-    diffCount: diff.count,
+    slop: diff.count,
     slopLevel: diff.slopLevel,
     listedTokens: mergeListings(survivor.listedTokens, donor.listedTokens),
     steps: [
@@ -669,7 +669,7 @@ function mergeStatesWithDiff(
         donor: donor.label,
         result: label,
         resultLevel: survivor.level + 1,
-        diffCount: diff.count,
+        slop: diff.count,
         slopLevel: diff.slopLevel,
       },
     ],
@@ -702,7 +702,7 @@ function snapshotsToStates(tokens: PlannerToken[]): State[] {
       embedding: hexToBytes(snapshot.embedding),
       embeddingKey: embeddingKey(snapshot.embedding),
       originalRgba: hexToBytes(snapshot.originalRgba),
-      diffCount: snapshot.diffCount ?? 0,
+      slop: snapshot.slop ?? 0,
       slopLevel: snapshot.slopLevel ?? 0,
       listedTokens: token.source === "listed" && token.listing ? [token.listing] : [],
       steps: [],
@@ -911,7 +911,7 @@ function pickScored(
 function compareStates(a: State, b: State): number {
   return (
     b.slopLevel - a.slopLevel ||
-    b.diffCount - a.diffCount ||
+    b.slop - a.slop ||
     b.level - a.level ||
     a.tokenIds.length - b.tokenIds.length ||
     a.anchorTokenId - b.anchorTokenId
@@ -940,7 +940,7 @@ function serializeState(state: State) {
     level: state.level,
     survivorTokenId: state.anchorTokenId,
     tokenIds: state.tokenIds,
-    diffCount: state.diffCount,
+    slop: state.slop,
     slopLevel: state.slopLevel,
     listedTokens: state.listedTokens,
     totalListingPriceEth: totalListingPriceEth(state.listedTokens),
@@ -996,7 +996,7 @@ function parseArgs(argv: string[]): Args {
         i++;
         break;
       case "--target":
-        args.target = parseDiffTarget(requireValue(arg, next), arg);
+        args.target = parseSlopTarget(requireValue(arg, next), arg);
         i++;
         break;
       case "--once":
@@ -1089,7 +1089,7 @@ function normalizeMineArgs(argv: string[]): string[] {
   return argv;
 }
 
-function parseDiffTarget(raw: string, name: string): number {
+function parseSlopTarget(raw: string, name: string): number {
   const value = Number(raw);
   if (!Number.isInteger(value) || value < 0 || value > 576) throw new Error(`${name} must be an integer from 0 to 576`);
   return value;
@@ -1101,11 +1101,11 @@ class TopStates {
 
   constructor(private readonly limit: number) {}
 
-  wouldKeep(survivor: State, donor: State, diffCount: number, slopLevel: number): boolean {
+  wouldKeep(survivor: State, donor: State, slop: number, slopLevel: number): boolean {
     if (this.states.length < this.limit) return true;
     if (!this.sorted) this.trim();
     const worst = this.states[this.states.length - 1]!;
-    return compareCandidate(survivor, donor, diffCount, slopLevel, worst) < 0;
+    return compareCandidate(survivor, donor, slop, slopLevel, worst) < 0;
   }
 
   add(state: State): void {
@@ -1129,14 +1129,14 @@ class TopStates {
 function compareCandidate(
   survivor: State,
   donor: State,
-  diffCount: number,
+  slop: number,
   slopLevel: number,
   state: State,
 ): number {
   const tokenCount = survivor.tokenIds.length + donor.tokenIds.length;
   return (
     state.slopLevel - slopLevel ||
-    state.diffCount - diffCount ||
+    state.slop - slop ||
     state.level - (survivor.level + 1) ||
     tokenCount - state.tokenIds.length ||
     survivor.anchorTokenId - state.anchorTokenId
@@ -1146,7 +1146,7 @@ function compareCandidate(
 function compareSerializedStates(a: SerializedState, b: SerializedState): number {
   return (
     b.slopLevel - a.slopLevel ||
-    b.diffCount - a.diffCount ||
+    b.slop - a.slop ||
     b.level - a.level ||
     a.tokenIds.length - b.tokenIds.length ||
     a.survivorTokenId - b.survivorTokenId
@@ -1166,7 +1166,7 @@ function printMineResult(result: MineResult, started: number): void {
 
 function printState(state: SerializedState, rank: number): void {
   console.log(
-    `${rank}. ${state.label}: L${state.level}, slop ${state.slopLevel}, diff ${state.diffCount}, survivor #${state.survivorTokenId}, uses ${state.tokenIds.map((id) => `#${id}`).join(", ")}`,
+    `${rank}. ${state.label}: merge L${state.level}, slop ${state.slop}, slop level ${state.slopLevel}, survivor #${state.survivorTokenId}, uses ${state.tokenIds.map((id) => `#${id}`).join(", ")}`,
   );
   if (state.listedTokens.length > 0) {
     const total = totalListingPriceEth(state.listedTokens);
@@ -1175,7 +1175,7 @@ function printState(state: SerializedState, rank: number): void {
   }
   for (const [stepIndex, step] of state.steps.entries()) {
     console.log(
-      `   ${stepIndex + 1}. ${step.survivor} <- ${step.donor} => ${step.result} (L${step.resultLevel}, slop ${step.slopLevel}, diff ${step.diffCount})`,
+      `   ${stepIndex + 1}. ${step.survivor} <- ${step.donor} => ${step.result} (merge L${step.resultLevel}, slop ${step.slop}, slop level ${step.slopLevel})`,
     );
   }
 }
@@ -1233,12 +1233,12 @@ class MinerUi {
       `Kept      ${formatNumber(this.progress.kept)}    Possible ${formatNumber(this.progress.possible)}`,
       "",
       "Best",
-      best ? `  diff ${best.diffCount}  slop ${best.slopLevel}  level ${best.level}  survivor #${best.survivorTokenId}` : "  none yet",
+      best ? `  slop ${best.slop}  slop level ${best.slopLevel}  merge level ${best.level}  survivor #${best.survivorTokenId}` : "  none yet",
       best ? `  uses ${best.tokenIds.map((id) => `#${id}`).join(", ")}` : "",
       best && best.listedTokens.length > 0 ? `  buys ${best.listedTokens.map(formatListing).join(", ")}` : "",
       "",
       this.progress.message ? `Status: ${this.progress.message}` : "Status: mining uses local compute; Ctrl-C to stop",
-      this.finished ? "" : "Tip: add --target N to stop automatically when a diff target is found",
+      this.finished ? "" : "Tip: add --target N to stop automatically when a slop target is found",
     ].filter((line) => line !== "");
 
     process.stdout.write("\x1b[H\x1b[J");
@@ -1262,7 +1262,7 @@ function usage() {
 
 Options:
   --owner 0x...   Holder address to mine from
-  --target N      Stop when a path reaches diff count N
+  --target N      Stop when a path reaches slop N
   --listings      Include listed Slonks up to ${DEFAULT_LISTING_FLOOR_MULTIPLE}x floor
   --budget ETH    Include listings, but only show paths at or below this total ETH spend
   --once          Run one strong mining pass and exit

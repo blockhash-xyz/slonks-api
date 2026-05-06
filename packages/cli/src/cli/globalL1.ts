@@ -43,7 +43,7 @@ type PairResult = {
   donorTokenId: number;
   survivorSourceId: number;
   donorSourceId: number;
-  diffCount: number;
+  slop: number;
   slopLevel: number;
 };
 
@@ -115,7 +115,7 @@ export async function runGlobalL1(argv = process.argv.slice(2)) {
     for (let i = 0; i < output.best.length; i++) {
       const pair = output.best[i]!;
       console.log(
-        `${i + 1}. #${pair.survivorTokenId} <- #${pair.donorTokenId}: slop ${pair.slopLevel}, diff ${pair.diffCount}`,
+        `${i + 1}. #${pair.survivorTokenId} <- #${pair.donorTokenId}: slop ${pair.slop}, slop level ${pair.slopLevel}`,
       );
     }
   } finally {
@@ -229,7 +229,7 @@ async function runWorker(args: Args): Promise<void> {
         donorTokenId: donor.tokenId,
         survivorSourceId: survivor.sourceId,
         donorSourceId: donor.sourceId,
-        diffCount: diff.count,
+        slop: diff.count,
         slopLevel: diff.slopLevel,
       };
       if (top.wouldKeep(pair)) top.add(pair);
@@ -340,7 +340,7 @@ function normalizeArgs(argv: string[]): string[] {
 function comparePairs(a: PairResult, b: PairResult): number {
   return (
     b.slopLevel - a.slopLevel ||
-    b.diffCount - a.diffCount ||
+    b.slop - a.slop ||
     a.survivorTokenId - b.survivorTokenId ||
     a.donorTokenId - b.donorTokenId
   );

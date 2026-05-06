@@ -36,7 +36,7 @@ tokens_route.get("/:id{[0-9]+}", async (c) => {
   return c.json(snap);
 });
 
-// GET /tokens?owner=0x..&mergeLevel=&minDiff=&maxDiff=&type=&attribute=&sort=&page=&limit=
+// GET /tokens?owner=0x..&mergeLevel=&minSlop=&maxSlop=&type=&attribute=&sort=&page=&limit=
 tokens_route.get("/", async (c) => {
   const sp = c.req.query();
   if (sp.ids != null) {
@@ -85,10 +85,10 @@ tokens_route.get("/", async (c) => {
     conditions.push(eq(tokens.mergeLevel, value));
   }
   const intFilters = [
-    ["minDiff", tokens.diffCount, gte, 0, 576],
-    ["maxDiff", tokens.diffCount, lte, 0, 576],
-    ["minSlop", tokens.slopLevel, gte, 0, 11],
-    ["maxSlop", tokens.slopLevel, lte, 0, 11],
+    ["minSlop", tokens.slop, gte, 0, 576],
+    ["maxSlop", tokens.slop, lte, 0, 576],
+    ["minSlopLevel", tokens.slopLevel, gte, 0, 11],
+    ["maxSlopLevel", tokens.slopLevel, lte, 0, 11],
     ["baseSourceId", tokens.baseSourceId, eq, 0, 9_999],
     ["sourceId", tokens.sourceId, eq, 0, 9_999],
   ] as const;
@@ -106,13 +106,13 @@ tokens_route.get("/", async (c) => {
 
   let order: SQL[];
   switch (sp.sort) {
-    case "diff_asc":
-      order = [asc(tokens.diffCount), asc(tokens.tokenId)];
-      break;
-    case "diff_desc":
-      order = [desc(tokens.diffCount), asc(tokens.tokenId)];
+    case "slop_asc":
+      order = [asc(tokens.slop), asc(tokens.tokenId)];
       break;
     case "slop_desc":
+      order = [desc(tokens.slop), asc(tokens.tokenId)];
+      break;
+    case "slop_level_desc":
       order = [desc(tokens.slopLevel), asc(tokens.tokenId)];
       break;
     case "merge_desc":
@@ -131,7 +131,7 @@ tokens_route.get("/", async (c) => {
     sourceId: tokens.sourceId,
     baseSourceId: tokens.baseSourceId,
     mergeLevel: tokens.mergeLevel,
-    diffCount: tokens.diffCount,
+    slop: tokens.slop,
     slopLevel: tokens.slopLevel,
     punkType: sourcePunks.punkType,
     attributesText: sourcePunks.attributesText,

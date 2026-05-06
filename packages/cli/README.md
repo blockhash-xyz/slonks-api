@@ -44,7 +44,7 @@ until you stop it.
 slonks mine --owner 0x2052051a0474fb0b98283b3f38c13b0b0b6a3677
 ```
 
-Stop once a target diff count is found:
+Stop once a target slop value is found:
 
 ```bash
 slonks mine --owner 0x... --target 330
@@ -59,7 +59,7 @@ slonks mine --owner 0x... --listings --budget 0.02 --target 330
 Options:
 
 - `--owner 0x...`: required holder address.
-- `--target N`: stop when a path reaches diff count `N`.
+- `--target N`: stop when a path reaches slop `N`.
 - `--listings`: include listed Slonks from `/listings`, capped to `2x` floor by default.
 - `--budget ETH`: include listings, but only show paths at or below this total ETH spend.
 - `--once`: run one strong mining pass and exit.

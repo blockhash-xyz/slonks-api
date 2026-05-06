@@ -23,7 +23,7 @@ const token = {
   mergeLevel: 1,
   mergeEmbedding: new Uint8Array([9, 8]),
   generatedPixels: new Uint8Array([7, 6]),
-  diffCount: 55,
+  slop: 55,
   slopLevel: 1,
   mintedAtBlock: 1n,
   lastEventBlock: 2n,
@@ -38,8 +38,8 @@ const source = {
   originalRgba: new Uint8Array([1, 2]),
   sourceEmbedding: new Uint8Array([3, 4]),
   generatedPixels: new Uint8Array([5, 6]),
-  baseDiffMask: new Uint8Array([0]),
-  baseDiffCount: 10,
+  baseSlopMask: new Uint8Array([0]),
+  baseSlop: 10,
   baseSlopLevel: 0,
 };
 
@@ -63,7 +63,7 @@ describe("buildTokenSnapshot", () => {
       embedding: "0x0908",
       generatedPixels: "0x0706",
       originalRgba: "0x0102",
-      diffCount: 55,
+      slop: 55,
       slopLevel: 1,
     });
   });
@@ -79,7 +79,7 @@ describe("buildTokenSnapshot", () => {
       embedding: null,
       generatedPixels: null,
       originalRgba: null,
-      diffCount: null,
+      slop: null,
       slopLevel: null,
     });
     expect(buildTokenSnapshot(token, null, collection)).toMatchObject({ sourceId: null, embedding: null });

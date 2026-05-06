@@ -16,7 +16,7 @@ type MergeTreeState = {
   embedding: `0x${string}` | null;
   generatedPixels?: `0x${string}` | null;
   originalRgba?: `0x${string}` | null;
-  diffCount: number | null;
+  slop: number | null;
   slopLevel: number | null;
 };
 
@@ -26,7 +26,7 @@ type MergeTreeStep = {
   after: MergeTreeState;
   change: {
     mergeLevelDelta: number | null;
-    diffCountDelta: number | null;
+    slopDelta: number | null;
     slopLevelDelta: number | null;
   };
   donor: MergeTreeNode;
@@ -153,7 +153,7 @@ function buildNode(tokenId: number, cutoffOrder: number, context: BuildContext, 
       after,
       change: {
         mergeLevelDelta: after.mergeLevel - before.mergeLevel,
-        diffCountDelta: delta(before.diffCount, after.diffCount),
+        slopDelta: delta(before.slop, after.slop),
         slopLevelDelta: delta(before.slopLevel, after.slopLevel),
       },
       donor,
@@ -193,7 +193,7 @@ function initialState(
     embedding: source?.sourceEmbedding ?? null,
     generatedPixels: source?.generatedPixels ?? null,
     originalRgba: source?.originalRgba ?? null,
-    diffCount: source?.baseDiffCount ?? null,
+    slop: source?.baseSlop ?? null,
     slopLevel: source?.baseSlopLevel ?? null,
     includePixels,
   });
@@ -221,7 +221,7 @@ function mergedState(
     embedding,
     generatedPixels,
     originalRgba: source?.originalRgba ?? null,
-    diffCount: diff?.count ?? null,
+    slop: diff?.count ?? null,
     slopLevel: diff?.slopLevel ?? null,
     includePixels,
   });
@@ -234,7 +234,7 @@ function stateDto(input: {
   embedding: Uint8Array | null;
   generatedPixels: Uint8Array | null;
   originalRgba: Uint8Array | null;
-  diffCount: number | null;
+  slop: number | null;
   slopLevel: number | null;
   includePixels: boolean;
 }): MergeTreeState {
@@ -243,7 +243,7 @@ function stateDto(input: {
     sourceId: input.sourceId,
     mergeLevel: input.mergeLevel,
     embedding: input.embedding ? bytesToHex(input.embedding) : null,
-    diffCount: input.diffCount,
+    slop: input.slop,
     slopLevel: input.slopLevel,
   };
 

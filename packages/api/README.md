@@ -44,7 +44,7 @@ For all 10,000 source punks:
 - `CryptoPunksData.punkAttributes(sourceId)` as text plus parsed attributes.
 - `SlonksImageModel.sourceEmbedding(sourceId)`.
 - `SlonksImageModel.renderSourcePixels(sourceId)` as 576 palette indexes.
-- Base diff mask, diff count, and slop level.
+- Base slop mask, slop, and slop level.
 
 After reveal, token `sourceId` is computed as:
 
@@ -64,7 +64,7 @@ locally from the bundled model weights.
   - `embedding`: 10 bytes.
   - `generatedPixels`: 576 palette indexes.
   - `originalRgba`: 2304 RGBA bytes.
-  - `diffMask`: 72 bytes.
+  - `slopMask`: 72 bytes.
 - Most list endpoints use `page`, `limit`, `hasMore`, and `nextPage`.
 - `/activity` uses cursor pagination with `nextCursor`.
 - Errors are shaped like `{ "error": "message" }`.
@@ -90,7 +90,7 @@ type TokenSnapshot = {
   embedding: `0x${string}` | null;
   generatedPixels: `0x${string}` | null;
   originalRgba: `0x${string}` | null;
-  diffCount: number | null;
+  slop: number | null;
   slopLevel: number | null;
 };
 ```
@@ -106,7 +106,7 @@ type TokenListItem = {
   sourceId: number | null;
   baseSourceId: number | null;
   mergeLevel: number;
-  diffCount: number | null;
+  slop: number | null;
   slopLevel: number | null;
   punkType: string | null;
   attributesText: string | null;
@@ -153,7 +153,7 @@ Histograms for collection views and rarity-ish UI.
 Returns:
 
 - `byMergeLevel`: `{ mergeLevel, count }[]`
-- `bySlop`: `{ slopLevel, count }[]`
+- `bySlopLevel`: `{ slopLevel, count }[]`
 - `byType`: punk type rows from Postgres, ordered by count desc
 
 ### `GET /tokens/:id`
@@ -181,12 +181,12 @@ Query params:
 - `owner`: holder address.
 - `ids`: comma-separated token ids. Up to 200. When present, returns full snapshots in requested order and ignores other filters.
 - `mergeLevel`: exact merge level, `0..255`.
-- `minDiff`, `maxDiff`: diff count range, `0..576`.
-- `minSlop`, `maxSlop`: slop level range, `0..11`.
+- `minSlop`, `maxSlop`: slop range, `0..576`.
+- `minSlopLevel`, `maxSlopLevel`: slop level range, `0..11`.
 - `baseSourceId`, `sourceId`: exact source id, `0..9999`.
 - `type`: exact punk type, for example `Male`, `Female`, `Zombie`, `Ape`, `Alien`.
 - `attribute`: case-insensitive text match against attributes.
-- `sort`: `id_asc` default, `id_desc`, `diff_asc`, `diff_desc`, `slop_desc`, `merge_desc`.
+- `sort`: `id_asc` default, `id_desc`, `slop_asc`, `slop_desc`, `slop_level_desc`, `merge_desc`.
 - `page`: default `1`.
 - `limit`: default `50`, max `200`.
 - `include`: add `pixels` to include `generatedPixels` and `originalRgba`.
@@ -261,7 +261,7 @@ type MergeTreeNode = {
     after: MergeTreeState;
     change: {
       mergeLevelDelta: number | null;
-      diffCountDelta: number | null;
+      slopDelta: number | null;
       slopLevelDelta: number | null;
     };
     donor: MergeTreeNode;
@@ -273,7 +273,7 @@ type MergeTreeState = {
   sourceId: number | null;
   mergeLevel: number;
   embedding: string | null;
-  diffCount: number | null;
+  slop: number | null;
   slopLevel: number | null;
   generatedPixels?: string | null;
   originalRgba?: string | null;
@@ -330,7 +330,7 @@ Returns:
   chainId: 1;
   owner: string;
   total: number;
-  avgDiff: number | null;
+  avgSlop: number | null;
   byMergeLevel: Array<{ mergeLevel: number; count: number }>;
 }
 ```
@@ -343,7 +343,7 @@ Query params:
 
 - `page`: default `1`.
 - `limit`: default `50`, max `200`.
-- `sort`: `count_desc` default, `max_merge_desc`, `merged_count_desc`, `avg_diff_desc`, `max_diff_desc`, `avg_slop_desc`.
+- `sort`: `count_desc` default, `max_merge_desc`, `merged_count_desc`, `avg_slop_desc`, `max_slop_desc`, `avg_slop_level_desc`, `max_slop_level_desc`.
 
 Returns:
 
@@ -354,10 +354,10 @@ Returns:
     owner: string | null;
     count: number;
     mergedCount: number;
-    avgDiff: number | null;
-    maxDiff: number | null;
     avgSlop: number | null;
     maxSlop: number | null;
+    avgSlopLevel: number | null;
+    maxSlopLevel: number | null;
     maxMergeLevel: number;
   }>;
   page: number;
@@ -470,8 +470,8 @@ type MergePreview = {
   embedding: `0x${string}`;
   generatedPixels: `0x${string}`;
   originalRgba: `0x${string}`;
-  diffMask: `0x${string}`;
-  diffCount: number;
+  slopMask: `0x${string}`;
+  slop: number;
   slopLevel: number;
 };
 ```

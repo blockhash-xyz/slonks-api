@@ -7,7 +7,7 @@ export type TokenListRow = {
   sourceId: number | null;
   baseSourceId: number | null;
   mergeLevel: number;
-  diffCount: number | null;
+  slop: number | null;
   slopLevel: number | null;
   punkType: string | null;
   attributesText: string | null;
@@ -27,7 +27,7 @@ export function tokenListDto(row: TokenListRow, includePixels: boolean) {
     sourceId: row.sourceId,
     baseSourceId: row.baseSourceId,
     mergeLevel: row.mergeLevel,
-    diffCount: row.diffCount,
+    slop: row.slop,
     slopLevel: row.slopLevel,
     punkType: row.punkType,
     attributesText: row.attributesText,

@@ -55,7 +55,7 @@ export async function recordMerge(m: MergeRecord): Promise<boolean> {
       mergeLevel: m.mergeLevel,
       mergeEmbedding: null,
       generatedPixels: null,
-      diffCount: null,
+      slop: null,
       slopLevel: null,
       updatedAt: new Date(),
     })
@@ -67,7 +67,7 @@ export async function recordMerge(m: MergeRecord): Promise<boolean> {
       mergeLevel: 0,
       mergeEmbedding: null,
       generatedPixels: null,
-      diffCount: null,
+      slop: null,
       slopLevel: null,
       updatedAt: new Date(),
     })
@@ -166,7 +166,7 @@ async function readBaseSourceId(tokenId: number): Promise<number | null> {
 }
 
 // Called after a SlonkMerged event. Re-renders pixels from the post-blend
-// embedding (which the manager already stored), recomputes the diff against
+// embedding (which the manager already stored), recomputes slop against
 // the survivor's base punk, and burns the donor row.
 export async function applyMergeRender(survivorTokenId: number, burnedTokenId: number): Promise<void> {
   await refreshMergedTokenRender(survivorTokenId);
@@ -179,7 +179,7 @@ export async function applyMergeRender(survivorTokenId: number, burnedTokenId: n
       mergeLevel: 0,
       mergeEmbedding: null,
       generatedPixels: null,
-      diffCount: null,
+      slop: null,
       slopLevel: null,
       updatedAt: new Date(),
     })
@@ -196,7 +196,7 @@ export async function reconcileMergedTokens(limit = 50): Promise<number> {
         or(
           isNull(tokens.mergeEmbedding),
           isNull(tokens.generatedPixels),
-          isNull(tokens.diffCount),
+          isNull(tokens.slop),
           isNull(tokens.slopLevel),
         ),
       ),
@@ -246,13 +246,13 @@ async function refreshMergedTokenRender(survivorTokenId: number): Promise<boolea
     update.generatedPixels = generated;
   }
 
-  // Diff vs the survivor's source punk. Requires source_punks row.
+  // Slop vs the survivor's source punk. Requires source_punks row.
   let hasDiff = false;
   if (generated && survivor.sourceId != null) {
     const [src] = await db.select().from(sourcePunks).where(eq(sourcePunks.sourceId, survivor.sourceId)).limit(1);
     if (src) {
       const d = diffPixels(generated, src.originalRgba);
-      update.diffCount = d.count;
+      update.slop = d.count;
       update.slopLevel = d.slopLevel;
       hasDiff = true;
     }

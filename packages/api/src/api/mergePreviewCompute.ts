@@ -24,8 +24,8 @@ export type MergePreviewItem = {
   embedding: Hex;
   generatedPixels: Hex;
   originalRgba: Hex;
-  diffMask: Hex;
-  diffCount: number;
+  slopMask: Hex;
+  slop: number;
   slopLevel: number;
 };
 
@@ -94,8 +94,8 @@ export function computeMergePreview(
       embedding: bytesToHex(blended),
       generatedPixels: bytesToHex(generated),
       originalRgba: bytesToHex(survivor.source.originalRgba),
-      diffMask: bytesToHex(diff.mask),
-      diffCount: diff.count,
+      slopMask: bytesToHex(diff.mask),
+      slop: diff.count,
       slopLevel: diff.slopLevel,
     },
   };

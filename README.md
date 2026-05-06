@@ -11,7 +11,7 @@ https://api.slonks.xyz
 ## Packages
 
 - `packages/api`: private `@blockhash/slonks-api` package for the indexer, HTTP API, Fly config, Dockerfile, and migrations.
-- `packages/core`: shared `@blockhash/slonks-core` package for attributes, embedding blending, local rendering, palette data, and diff math.
+- `packages/core`: shared `@blockhash/slonks-core` package for attributes, embedding blending, local rendering, palette data, and slop math.
 - `packages/cli`: public `@blockhash/slonks` package for the downloadable Slonks CLI.
 
 ## Docs

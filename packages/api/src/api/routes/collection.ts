@@ -28,10 +28,10 @@ collection.get("/status", async (c) => {
   return c.json(buildCollectionStatus(row));
 });
 
-// Per-attribute, per-type, per-slop, per-merge-level histograms — used by the
+// Per-attribute, per-type, per-slop-level, per-merge-level histograms — used by the
 // merge lab and rarity rankings.
 collection.get("/distributions", async (c) => {
-  const [byMergeLevel, bySlop, byType] = await Promise.all([
+  const [byMergeLevel, bySlopLevel, byType] = await Promise.all([
     db
       .select({
         mergeLevel: tokens.mergeLevel,
@@ -61,5 +61,5 @@ collection.get("/distributions", async (c) => {
   ]);
 
   c.header("Cache-Control", "public, s-maxage=60, stale-while-revalidate=300");
-  return c.json({ byMergeLevel, bySlop, byType });
+  return c.json({ byMergeLevel, bySlopLevel, byType });
 });

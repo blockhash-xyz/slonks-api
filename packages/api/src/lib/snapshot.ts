@@ -19,7 +19,7 @@ export type TokenSnapshot = {
   embedding: Hex | null;
   generatedPixels: Hex | null;
   originalRgba: Hex | null;
-  diffCount: number | null;
+  slop: number | null;
   slopLevel: number | null;
 };
 
@@ -67,7 +67,7 @@ export function buildTokenSnapshot(
     embedding: embeddingBytes && showSource ? bytesToHex(embeddingBytes) : null,
     generatedPixels: showSource && generatedBytes ? bytesToHex(generatedBytes) : null,
     originalRgba: showSource && originalBytes ? bytesToHex(originalBytes) : null,
-    diffCount: showSource ? token.diffCount ?? null : null,
+    slop: showSource ? token.slop ?? null : null,
     slopLevel: showSource ? token.slopLevel ?? null : null,
   };
 }

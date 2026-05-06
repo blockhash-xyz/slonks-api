@@ -10,9 +10,10 @@ const SORTS = new Set([
   "count_desc",
   "max_merge_desc",
   "merged_count_desc",
-  "avg_diff_desc",
-  "max_diff_desc",
   "avg_slop_desc",
+  "max_slop_desc",
+  "avg_slop_level_desc",
+  "max_slop_level_desc",
 ]);
 
 holders.get("/", async (c) => {
@@ -30,10 +31,10 @@ holders.get("/", async (c) => {
       owner: tokens.owner,
       count: sql<number>`count(*)::int`,
       mergedCount: sql<number>`count(*) filter (where ${tokens.mergeLevel} > 0)::int`,
-      avgDiff: sql<number | null>`avg(${tokens.diffCount})::float`,
-      maxDiff: sql<number | null>`max(${tokens.diffCount})::int`,
-      avgSlop: sql<number | null>`avg(${tokens.slopLevel})::float`,
-      maxSlop: sql<number | null>`max(${tokens.slopLevel})::int`,
+      avgSlop: sql<number | null>`avg(${tokens.slop})::float`,
+      maxSlop: sql<number | null>`max(${tokens.slop})::int`,
+      avgSlopLevel: sql<number | null>`avg(${tokens.slopLevel})::float`,
+      maxSlopLevel: sql<number | null>`max(${tokens.slopLevel})::int`,
       maxMergeLevel: sql<number>`max(${tokens.mergeLevel})::int`,
     })
     .from(tokens)
@@ -53,10 +54,10 @@ holders.get("/", async (c) => {
       owner: formatOwner(row.owner),
       count: row.count,
       mergedCount: row.mergedCount,
-      avgDiff: row.avgDiff,
-      maxDiff: row.maxDiff,
       avgSlop: row.avgSlop,
       maxSlop: row.maxSlop,
+      avgSlopLevel: row.avgSlopLevel,
+      maxSlopLevel: row.maxSlopLevel,
       maxMergeLevel: row.maxMergeLevel,
     })),
     page,
@@ -73,12 +74,14 @@ function holderOrder(sort: string): SQL[] {
       return [sql`max(${tokens.mergeLevel}) desc`, sql`count(*) desc`, asc(tokens.owner)];
     case "merged_count_desc":
       return [sql`count(*) filter (where ${tokens.mergeLevel} > 0) desc`, sql`count(*) desc`, asc(tokens.owner)];
-    case "avg_diff_desc":
-      return [sql`avg(${tokens.diffCount}) desc nulls last`, sql`count(*) desc`, asc(tokens.owner)];
-    case "max_diff_desc":
-      return [sql`max(${tokens.diffCount}) desc nulls last`, sql`count(*) desc`, asc(tokens.owner)];
     case "avg_slop_desc":
+      return [sql`avg(${tokens.slop}) desc nulls last`, sql`count(*) desc`, asc(tokens.owner)];
+    case "max_slop_desc":
+      return [sql`max(${tokens.slop}) desc nulls last`, sql`count(*) desc`, asc(tokens.owner)];
+    case "avg_slop_level_desc":
       return [sql`avg(${tokens.slopLevel}) desc nulls last`, sql`count(*) desc`, asc(tokens.owner)];
+    case "max_slop_level_desc":
+      return [sql`max(${tokens.slopLevel}) desc nulls last`, sql`count(*) desc`, asc(tokens.owner)];
     default:
       return [sql`count(*) desc`, asc(tokens.owner)];
   }

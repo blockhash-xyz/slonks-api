@@ -14,7 +14,7 @@ function token(id: number, overrides: Partial<TokenSourceRow["token"]> = {}): To
     mergeLevel: 0,
     mergeEmbedding: null,
     generatedPixels: null,
-    diffCount: null,
+    slop: null,
     slopLevel: null,
     mintedAtBlock: 1n,
     lastEventBlock: 2n,
@@ -32,8 +32,8 @@ function source(id: number, overrides: Partial<NonNullable<TokenSourceRow["sourc
     originalRgba: new Uint8Array(24 * 24 * 4),
     sourceEmbedding: sourceEmbeddingLocal(id),
     generatedPixels: new Uint8Array(24 * 24),
-    baseDiffMask: new Uint8Array(72),
-    baseDiffCount: 0,
+    baseSlopMask: new Uint8Array(72),
+    baseSlop: 0,
     baseSlopLevel: 0,
     ...overrides,
   };
@@ -143,6 +143,6 @@ describe("computeMergePreview", () => {
     });
     expect(result.item.generatedPixels.length).toBe(2 + 24 * 24 * 2);
     expect(result.item.originalRgba.length).toBe(2 + 24 * 24 * 4 * 2);
-    expect(result.item.diffMask.length).toBe(2 + 72 * 2);
+    expect(result.item.slopMask.length).toBe(2 + 72 * 2);
   });
 });

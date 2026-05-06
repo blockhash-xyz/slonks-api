@@ -292,20 +292,20 @@ async function fillSourceIdsAfterReveal(offset: number): Promise<void> {
     where base_source_id is not null and source_id is null
   `);
 
-  // Pre-merge tokens inherit the source punk's generated_pixels + diff stats.
+  // Pre-merge tokens inherit the source punk's generated_pixels + slop stats.
   // Skip tokens with merge_level > 0 — those are filled in by applyMergeRender.
   await db.execute(sql`
     update tokens t
     set
       generated_pixels = sp.generated_pixels,
-      diff_count = sp.base_diff_count,
+      slop = sp.base_slop,
       slop_level = sp.base_slop_level,
       updated_at = now()
     from source_punks sp
     where sp.source_id = t.source_id
       and t.merge_level = 0
       and t.source_id is not null
-      and (t.generated_pixels is null or t.diff_count is null)
+      and (t.generated_pixels is null or t.slop is null)
   `);
 }
 

@@ -31,13 +31,13 @@ export const sourcePunks = pgTable(
     originalRgba: bytea("original_rgba").notNull(), // 2304 bytes
     sourceEmbedding: bytea("source_embedding").notNull(), // model embedDim bytes (10)
     generatedPixels: bytea("generated_pixels").notNull(), // 576 palette indexes
-    baseDiffMask: bytea("base_diff_mask").notNull(), // 72 bytes
-    baseDiffCount: smallint("base_diff_count").notNull(),
+    baseSlopMask: bytea("base_slop_mask").notNull(), // 72 bytes
+    baseSlop: smallint("base_slop").notNull(),
     baseSlopLevel: smallint("base_slop_level").notNull(),
   },
   (t) => ({
     typeIdx: index("source_punks_type_idx").on(t.punkType),
-    diffIdx: index("source_punks_diff_idx").on(t.baseDiffCount),
+    slopIdx: index("source_punks_base_slop_idx").on(t.baseSlop),
   }),
 );
 
@@ -56,7 +56,7 @@ export const tokens = pgTable(
     // Pixels actually rendered for this token. For unmerged tokens, equals sourcePunks.generatedPixels.
     // For merged tokens, the indexer re-renders via SlonksImageModel.renderEmbeddingPixels.
     generatedPixels: bytea("generated_pixels"),
-    diffCount: smallint("diff_count"),
+    slop: smallint("slop"),
     slopLevel: smallint("slop_level"),
     mintedAtBlock: bigint("minted_at_block", { mode: "bigint" }),
     lastEventBlock: bigint("last_event_block", { mode: "bigint" }),
@@ -67,8 +67,8 @@ export const tokens = pgTable(
     sourceIdx: index("tokens_source_idx").on(t.sourceId),
     baseSourceIdx: index("tokens_base_source_idx").on(t.baseSourceId),
     mergeLevelIdx: index("tokens_merge_level_idx").on(t.mergeLevel),
-    diffIdx: index("tokens_diff_idx").on(t.diffCount),
-    slopIdx: index("tokens_slop_idx").on(t.slopLevel),
+    slopIdx: index("tokens_slop_idx").on(t.slop),
+    slopLevelIdx: index("tokens_slop_level_idx").on(t.slopLevel),
   }),
 );
 

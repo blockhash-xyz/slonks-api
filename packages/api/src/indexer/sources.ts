@@ -122,8 +122,8 @@ async function processOneSource(sourceId: number): Promise<void> {
         originalRgba,
         sourceEmbedding,
         generatedPixels: generatedBytes,
-        baseDiffMask: mask,
-        baseDiffCount: count,
+        baseSlopMask: mask,
+        baseSlop: count,
         baseSlopLevel: slopLevel,
       })
       .onConflictDoNothing({ target: sourcePunks.sourceId });

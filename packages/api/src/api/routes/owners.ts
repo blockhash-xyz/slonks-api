@@ -18,7 +18,7 @@ owners.get("/:address/tokens", async (c) => {
     sourceId: tokens.sourceId,
     baseSourceId: tokens.baseSourceId,
     mergeLevel: tokens.mergeLevel,
-    diffCount: tokens.diffCount,
+    slop: tokens.slop,
     slopLevel: tokens.slopLevel,
     punkType: sourcePunks.punkType,
     attributesText: sourcePunks.attributesText,
@@ -55,7 +55,7 @@ owners.get("/:address/summary", async (c) => {
   const [counts] = await db
     .select({
       total: sql<number>`count(*)::int`,
-      avgDiff: sql<number | null>`avg(${tokens.diffCount})::float`,
+      avgSlop: sql<number | null>`avg(${tokens.slop})::float`,
     })
     .from(tokens)
     .where(and(eq(tokens.exists, true), eq(tokens.owner, lower)));
@@ -74,7 +74,7 @@ owners.get("/:address/summary", async (c) => {
     chainId: 1,
     owner: getAddress(address),
     total: counts?.total ?? 0,
-    avgDiff: counts?.avgDiff ?? null,
+    avgSlop: counts?.avgSlop ?? null,
     byMergeLevel,
   });
 });
