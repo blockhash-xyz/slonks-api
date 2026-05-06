@@ -7,7 +7,7 @@ app = "slonks-api"
 primary_region = "iad"
 
 [build]
-  dockerfile = "packages/api/Dockerfile"
+  dockerfile = "Dockerfile"
 
 [deploy]
   release_command = "bun packages/api/src/db/migrate.ts"
