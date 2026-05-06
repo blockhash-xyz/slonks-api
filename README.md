@@ -25,7 +25,7 @@ https://api.slonks.xyz
 - Chain: Ethereum mainnet, `chainId: 1`
 - Slonks deploy block: `24998760`
 - `Slonks`: `0x832233ddb7bcffd0ed53127dd6be3f1aa5845108`
-- `SlonksRenderer`: `0x103d4ef6e7d87ea27355b402a4ae0875c3fb32a1`
+- `SlonksRenderer`: `0x12b6f7572bcdd175b97b080ce3a6b2211a59c299`
 - `SlonksImageModel`: `0xca116243a2013ed33015c776ee37310b199ee80c`
 - `SlonksMergeManager`: `0x3e5bb2a724dbe9a6afe04ae7581639367693f51c`
 - `CryptoPunksData`: `0x16f5a35647d6f03d5d3da7b35409d65ba03af3b2`
