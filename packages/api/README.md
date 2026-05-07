@@ -207,7 +207,8 @@ Responses:
 
 1200x1200 PNG image for a Slonk. The route uses the token's current rendered
 pixels when available and falls back to its revealed source pixels for unmerged
-or burned tokens. Custom scaling is not supported.
+or burned tokens. Transparent palette pixels are composited over `#28313d` to
+match the onchain SVG renderer. Custom scaling is not supported.
 
 Example:
 

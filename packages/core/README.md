@@ -21,7 +21,7 @@ Inside this monorepo it is consumed by `@blockhash/slonks-api` and
 - `@blockhash/slonks-core/hex`: convert between `Uint8Array` and `0x` hex.
 - `@blockhash/slonks-core/imageModel`: load bundled model weights, render source/merge embeddings, and compute rendered slop locally.
 - `@blockhash/slonks-core/palette`: CryptoPunks palette constants and decoder.
-- `@blockhash/slonks-core/png`: encode rendered Slonk palette pixels as a 1200x1200 PNG.
+- `@blockhash/slonks-core/png`: encode rendered Slonk palette pixels as a 1200x1200 PNG composited over the renderer background.
 - `@blockhash/slonks-core/proof`: pack model proof inputs and decode Barretenberg proof artifacts.
 
 ## Model Data
@@ -81,6 +81,9 @@ import { encodeSlonkPng } from "@blockhash/slonks-core/png";
 const generatedPixels = new Uint8Array(24 * 24);
 const pngBytes = encodeSlonkPng(generatedPixels);
 ```
+
+The PNG encoder matches the onchain SVG renderer background. Palette index `0`
+is composited over `#28313d`, so the output is an opaque 1200x1200 image.
 
 ## Development
 

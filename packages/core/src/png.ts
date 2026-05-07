@@ -3,6 +3,7 @@ import { PALETTE_RGBA, PALETTE_SIZE, SLONK_PIXELS, SLONK_SIZE } from "./palette.
 
 export const DEFAULT_PNG_SCALE = 50;
 export const MAX_PNG_SCALE = 100;
+export const SLONK_BACKGROUND_RGBA = new Uint8Array([0x28, 0x31, 0x3d, 0xff]);
 
 const PNG_SIGNATURE = new Uint8Array([137, 80, 78, 71, 13, 10, 26, 10]);
 const CRC_TABLE = makeCrcTable();
@@ -28,10 +29,7 @@ export function encodeSlonkPng(pixels: Uint8Array, scale = DEFAULT_PNG_SCALE): U
       const paletteOffset = paletteIndex * 4;
       for (let dx = 0; dx < scale; dx++) {
         const out = 1 + (sourceX * scale + dx) * 4;
-        row[out] = PALETTE_RGBA[paletteOffset]!;
-        row[out + 1] = PALETTE_RGBA[paletteOffset + 1]!;
-        row[out + 2] = PALETTE_RGBA[paletteOffset + 2]!;
-        row[out + 3] = PALETTE_RGBA[paletteOffset + 3]!;
+        writeCompositedPaletteColor(row, out, paletteOffset);
       }
     }
 
@@ -55,6 +53,29 @@ export function encodeSlonkPng(pixels: Uint8Array, scale = DEFAULT_PNG_SCALE): U
     pngChunk("IDAT", new Uint8Array(deflateSync(raw, { level: 9 }))),
     pngChunk("IEND", new Uint8Array(0)),
   ]);
+}
+
+function writeCompositedPaletteColor(row: Uint8Array, offset: number, paletteOffset: number): void {
+  const alpha = PALETTE_RGBA[paletteOffset + 3]!;
+  if (alpha === 255) {
+    row[offset] = PALETTE_RGBA[paletteOffset]!;
+    row[offset + 1] = PALETTE_RGBA[paletteOffset + 1]!;
+    row[offset + 2] = PALETTE_RGBA[paletteOffset + 2]!;
+    row[offset + 3] = 255;
+    return;
+  }
+
+  const inverseAlpha = 255 - alpha;
+  row[offset] = Math.round(
+    (PALETTE_RGBA[paletteOffset]! * alpha + SLONK_BACKGROUND_RGBA[0]! * inverseAlpha) / 255,
+  );
+  row[offset + 1] = Math.round(
+    (PALETTE_RGBA[paletteOffset + 1]! * alpha + SLONK_BACKGROUND_RGBA[1]! * inverseAlpha) / 255,
+  );
+  row[offset + 2] = Math.round(
+    (PALETTE_RGBA[paletteOffset + 2]! * alpha + SLONK_BACKGROUND_RGBA[2]! * inverseAlpha) / 255,
+  );
+  row[offset + 3] = 255;
 }
 
 function pngChunk(type: string, data: Uint8Array): Uint8Array {

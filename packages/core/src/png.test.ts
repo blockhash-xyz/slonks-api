@@ -1,13 +1,14 @@
 import { inflateSync } from "node:zlib";
 import { describe, expect, test } from "bun:test";
 import { PALETTE_RGBA, SLONK_PIXELS } from "./palette.ts";
-import { encodeSlonkPng } from "./png.ts";
+import { encodeSlonkPng, SLONK_BACKGROUND_RGBA } from "./png.ts";
 
 describe("encodeSlonkPng", () => {
   test("encodes scaled RGBA PNGs from palette pixels", () => {
     const pixels = new Uint8Array(SLONK_PIXELS);
     pixels.fill(1);
-    pixels[0] = 2;
+    pixels[0] = 0;
+    pixels[1] = 2;
 
     const png = encodeSlonkPng(pixels, 2);
     expect(Array.from(png.slice(0, 8))).toEqual([137, 80, 78, 71, 13, 10, 26, 10]);
@@ -23,9 +24,9 @@ describe("encodeSlonkPng", () => {
     const stride = 1 + 48 * 4;
     expect(raw.length).toBe(stride * 48);
     expect(raw[0]).toBe(0);
-    expect(Array.from(raw.slice(1, 5))).toEqual(Array.from(PALETTE_RGBA.slice(2 * 4, 2 * 4 + 4)));
-    expect(Array.from(raw.slice(5, 9))).toEqual(Array.from(PALETTE_RGBA.slice(2 * 4, 2 * 4 + 4)));
-    expect(Array.from(raw.slice(1 + 2 * 4, 1 + 3 * 4))).toEqual(Array.from(PALETTE_RGBA.slice(1 * 4, 1 * 4 + 4)));
+    expect(Array.from(raw.slice(1, 5))).toEqual(Array.from(SLONK_BACKGROUND_RGBA));
+    expect(Array.from(raw.slice(5, 9))).toEqual(Array.from(SLONK_BACKGROUND_RGBA));
+    expect(Array.from(raw.slice(1 + 2 * 4, 1 + 3 * 4))).toEqual(Array.from(PALETTE_RGBA.slice(2 * 4, 2 * 4 + 4)));
   });
 
   test("defaults to 1200x1200 output", () => {
