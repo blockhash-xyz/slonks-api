@@ -170,6 +170,20 @@ export async function failVoidProofJob(job: VoidProofJobRow, message: string): P
     .where(eq(voidProofJobs.cacheKey, job.cacheKey));
 }
 
+export async function rejectVoidProofJob(cacheKey: string, message: string): Promise<void> {
+  await db
+    .update(voidProofJobs)
+    .set({
+      status: "failed",
+      lockedBy: null,
+      lockedAt: null,
+      lastError: message.slice(0, 2_000),
+      nextRunAt: new Date(),
+      updatedAt: new Date(),
+    })
+    .where(eq(voidProofJobs.cacheKey, cacheKey));
+}
+
 export function requestFromJob(row: VoidProofJobRow): ResolvedVoidProofRequest {
   return {
     tokenId: row.tokenId,

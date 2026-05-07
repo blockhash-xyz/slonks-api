@@ -34,6 +34,11 @@ voidProof.post("/", async (c) => {
   if (typeof resolved === "string") return c.json({ error: resolved }, 400);
   if (resolved) return respondWithProof(c, () => generateVoidProofFromResolved(resolved));
 
+  const { isPendingVoidClaim, notPendingVoidClaimMessage } = await import("../../prover/claimGuard.ts");
+  if (!(await isPendingVoidClaim(tokenId))) {
+    return c.json({ error: notPendingVoidClaimMessage(tokenId) }, 409);
+  }
+
   if (env.SLOP_REMOTE_PROVER_URL) {
     if (!waitForProof(c)) {
       const { resolveIndexedVoidProofRequest } = await import("../../prover/indexedRequest.ts");

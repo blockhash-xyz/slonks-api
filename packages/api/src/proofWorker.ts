@@ -5,9 +5,11 @@ import {
   claimVoidProofJob,
   completeVoidProofJob,
   failVoidProofJob,
+  rejectVoidProofJob,
   releaseVoidProofJob,
   requestFromJob,
 } from "./prover/jobs.ts";
+import { isPendingVoidClaim, notPendingVoidClaimMessage } from "./prover/claimGuard.ts";
 import { isVoidProof, requestRemoteVoidProof, RemoteProverError } from "./prover/remote.ts";
 import { writeStoredVoidProof } from "./prover/store.ts";
 
@@ -37,6 +39,13 @@ async function workerLoop(index: number): Promise<void> {
     const request = requestFromJob(job);
     console.log(`void proof job ${job.cacheKey} token ${job.tokenId} attempt ${job.attempts} started`);
     try {
+      if (!(await isPendingVoidClaim(job.tokenId))) {
+        const message = notPendingVoidClaimMessage(job.tokenId);
+        await rejectVoidProofJob(job.cacheKey, message);
+        console.warn(`void proof job ${job.cacheKey} token ${job.tokenId} rejected: ${message}`);
+        continue;
+      }
+
       const response = await requestRemoteVoidProof(request);
       if (response.status === 429) {
         const retryAfterMs = retryAfterMsFromBody(response.body, response.retryAfter) ?? env.SLOP_PROOF_PENDING_RETRY_MS;

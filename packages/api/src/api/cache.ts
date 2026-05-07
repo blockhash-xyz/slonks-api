@@ -65,6 +65,7 @@ export function responseCache(options: ResponseCacheOptions = {}): MiddlewareHan
   const maxResponseBytes = options.maxResponseBytes ?? DEFAULT_MAX_RESPONSE_BYTES;
   const now = options.now ?? Date.now;
   const entries = new Map<string, CacheEntry>();
+  const pendingEntries = new Map<string, Promise<CacheEntry | null>>();
   let totalBytes = 0;
 
   function deleteEntry(key: string): void {
@@ -108,31 +109,52 @@ export function responseCache(options: ResponseCacheOptions = {}): MiddlewareHan
     }
     if (cached) deleteEntry(key);
 
-    await next();
-
-    const ttl = sMaxage(c.res.headers.get("Cache-Control"));
-    if (!isCacheable(c.res, ttl)) {
-      guardUncacheableResponse(c.res);
-      c.res.headers.set("X-Slonks-Cache", "BYPASS");
-      return;
+    const pending = pendingEntries.get(key);
+    if (pending) {
+      const pendingEntry = await pending;
+      if (pendingEntry) return cachedResponse(c, pendingEntry, now());
     }
 
-    const body = await c.res.clone().arrayBuffer();
-    if (body.byteLength > maxResponseBytes) {
-      c.res.headers.set("X-Slonks-Cache", "BYPASS");
-      return;
-    }
-
-    writeEntry(key, {
-      body,
-      headers: [...c.res.headers.entries()],
-      status: c.res.status,
-      statusText: c.res.statusText,
-      storedAt: currentTime,
-      expiresAt: currentTime + ttl * 1_000,
-      size: body.byteLength,
+    let settlePending!: (entry: CacheEntry | null) => void;
+    const pendingPromise = new Promise<CacheEntry | null>((resolve) => {
+      settlePending = resolve;
     });
-    c.res.headers.set("X-Slonks-Cache", "MISS");
+    pendingEntries.set(key, pendingPromise);
+
+    try {
+      await next();
+
+      const ttl = sMaxage(c.res.headers.get("Cache-Control"));
+      if (!isCacheable(c.res, ttl)) {
+        guardUncacheableResponse(c.res);
+        c.res.headers.set("X-Slonks-Cache", "BYPASS");
+        settlePending(null);
+        return;
+      }
+
+      const body = await c.res.clone().arrayBuffer();
+      if (body.byteLength > maxResponseBytes) {
+        c.res.headers.set("X-Slonks-Cache", "BYPASS");
+        settlePending(null);
+        return;
+      }
+
+      const entry = {
+        body,
+        headers: [...c.res.headers.entries()],
+        status: c.res.status,
+        statusText: c.res.statusText,
+        storedAt: currentTime,
+        expiresAt: currentTime + ttl * 1_000,
+        size: body.byteLength,
+      };
+      writeEntry(key, entry);
+      settlePending(entry);
+      c.res.headers.set("X-Slonks-Cache", "MISS");
+    } finally {
+      settlePending(null);
+      pendingEntries.delete(key);
+    }
   };
 }
 
@@ -193,7 +215,13 @@ function isMicrocacheCandidate(c: Context): boolean {
   if (/^\/owners\/[^/]+\/summary$/.test(path)) return true;
 
   if (path === "/void/pending-claims") {
-    if (includeParam(url.searchParams.get("include"), "pixels")) return false;
+    if (
+      includeParam(url.searchParams.get("include"), "pixels") &&
+      !url.searchParams.has("owner") &&
+      !url.searchParams.has("recipient")
+    ) {
+      return false;
+    }
     return true;
   }
 

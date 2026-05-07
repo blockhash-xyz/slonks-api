@@ -8,6 +8,8 @@ const schema = z.object({
   OPENSEA_SLUG: z.string().default("slonks"),
   SLOP_REMOTE_PROVER_URL: z.string().url().optional(),
   SLOP_REMOTE_PROVER_TIMEOUT_MS: z.coerce.number().int().positive().default(300_000),
+  SLOP_REMOTE_PROVER_BUSY_RETRIES: z.coerce.number().int().nonnegative().default(12),
+  SLOP_REMOTE_PROVER_BUSY_RETRY_MS: z.coerce.number().int().positive().default(750),
   SLOP_PROVER_AUTH_TOKEN: z.string().optional(),
   SLOP_PROVER_ENABLED: z
     .preprocess((value) => {

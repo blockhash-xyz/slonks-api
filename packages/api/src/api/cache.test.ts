@@ -66,6 +66,54 @@ describe("API cache helpers", () => {
     expect(await expired.json()).toEqual({ calls: 2 });
   });
 
+  test("coalesces concurrent cacheable GET responses", async () => {
+    let calls = 0;
+    let release: () => void = () => {};
+    const blocker = new Promise<void>((resolve) => {
+      release = resolve;
+    });
+    const app = new Hono();
+    app.use("*", responseCache({ maxResponseBytes: 1_000 }));
+    app.get("/tokens/1", async (c) => {
+      calls++;
+      await blocker;
+      setCache(c, { sMaxage: 10, staleWhileRevalidate: 20 });
+      return c.json({ calls });
+    });
+
+    const firstRequest = app.request("/tokens/1");
+    await Promise.resolve();
+    const secondRequest = app.request("/tokens/1");
+    release();
+
+    const [first, second] = await Promise.all([firstRequest, secondRequest]);
+    expect(calls).toBe(1);
+    expect(first.headers.get("X-Slonks-Cache")).toBe("MISS");
+    expect(second.headers.get("X-Slonks-Cache")).toBe("HIT");
+    expect(await first.json()).toEqual({ calls: 1 });
+    expect(await second.json()).toEqual({ calls: 1 });
+  });
+
+  test("clears pending cache entries when handlers throw", async () => {
+    let calls = 0;
+    const app = new Hono();
+    app.use("*", responseCache({ maxResponseBytes: 1_000 }));
+    app.get("/tokens/1", (c) => {
+      calls++;
+      if (calls === 1) throw new Error("boom");
+      setCache(c, { sMaxage: 10, staleWhileRevalidate: 20 });
+      return c.json({ calls });
+    });
+    app.onError((err, c) => c.json({ error: err.message }, 500));
+
+    expect((await app.request("/tokens/1")).status).toBe(500);
+    const recovered = await app.request("/tokens/1");
+    expect(recovered.headers.get("X-Slonks-Cache")).toBe("MISS");
+    expect(await recovered.json()).toEqual({ calls: 2 });
+  });
+
+
+
   test("bypasses uncacheable methods and responses", async () => {
     let calls = 0;
     const app = new Hono();
@@ -169,6 +217,12 @@ describe("API cache helpers", () => {
     expect((await app.request("/collection/status")).headers.get("X-Slonks-Cache")).toBe("MISS");
     expect((await app.request("/tokens")).headers.get("X-Slonks-Cache")).toBe("MISS");
     expect((await app.request("/void/pending-claims")).headers.get("X-Slonks-Cache")).toBe("MISS");
+    expect((await app.request("/void/pending-claims?recipient=0xabc&include=pixels")).headers.get("X-Slonks-Cache")).toBe(
+      "MISS",
+    );
+    expect((await app.request("/void/pending-claims?recipient=0xabc&include=pixels")).headers.get("X-Slonks-Cache")).toBe(
+      "HIT",
+    );
     expect((await app.request("/png/1")).headers.get("X-Slonks-Cache")).toBe("MISS");
     expect((await app.request("/png/1")).headers.get("X-Slonks-Cache")).toBe("HIT");
   });

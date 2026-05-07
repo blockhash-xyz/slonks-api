@@ -23,6 +23,26 @@ export async function requestRemoteVoidProof(request: ResolvedVoidProofRequest):
   const headers = new Headers({ "Content-Type": "application/json" });
   if (env.SLOP_PROVER_AUTH_TOKEN) headers.set("Authorization", `Bearer ${env.SLOP_PROVER_AUTH_TOKEN}`);
 
+  let lastBusy: RemoteVoidProofResponse | null = null;
+  for (let attempt = 0; attempt <= env.SLOP_REMOTE_PROVER_BUSY_RETRIES; attempt += 1) {
+    const result = await requestRemoteVoidProofOnce(url, headers, request);
+    if (result.status !== 429) return result;
+    lastBusy = result;
+    if (attempt < env.SLOP_REMOTE_PROVER_BUSY_RETRIES) await sleep(env.SLOP_REMOTE_PROVER_BUSY_RETRY_MS);
+  }
+
+  return lastBusy ?? {
+    status: 429,
+    body: { error: "remote prover busy" },
+    retryAfter: null,
+  };
+}
+
+async function requestRemoteVoidProofOnce(
+  url: URL,
+  headers: Headers,
+  request: ResolvedVoidProofRequest,
+): Promise<RemoteVoidProofResponse> {
   let response: Response;
   try {
     response = await fetch(url, {
@@ -75,4 +95,8 @@ function parseJsonObject(text: string): Record<string, unknown> | null {
   } catch {
     return null;
   }
+}
+
+function sleep(ms: number): Promise<void> {
+  return new Promise((resolve) => setTimeout(resolve, ms));
 }

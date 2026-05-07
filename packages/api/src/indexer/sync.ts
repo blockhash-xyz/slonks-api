@@ -304,11 +304,13 @@ async function processSlopGameLogs(
     const tokenId = Number(args.tokenId);
     if (tokenId < 0 || tokenId >= MAX_SUPPLY) continue;
 
-    if (decoded.eventName === "SlonkLockedForSlop" && shouldProcessGameEvent(log.blockNumber, options.warmProofAfterBlock)) {
-      await warmVoidProof(tokenId, `SlonkLockedForSlop ${log.transactionHash}`.trim());
-    }
+    const shouldWarmProof =
+      decoded.eventName === "SlonkLockedForSlop" && shouldProcessGameEvent(log.blockNumber, options.warmProofAfterBlock);
 
-    if (!shouldProcessGameEvent(log.blockNumber, options.claimAfterBlock)) continue;
+    if (!shouldProcessGameEvent(log.blockNumber, options.claimAfterBlock)) {
+      if (shouldWarmProof) await warmVoidProof(tokenId, `SlonkLockedForSlop ${log.transactionHash}`.trim());
+      continue;
+    }
 
     switch (decoded.eventName) {
       case "SlonkLockedForSlop": {
@@ -360,6 +362,7 @@ async function processSlopGameLogs(
               updatedAt: new Date(),
             },
           });
+        if (shouldWarmProof) await warmVoidProof(tokenId, `SlonkLockedForSlop ${log.transactionHash}`.trim());
         break;
       }
       case "SlonkUnlockedFromSlop": {

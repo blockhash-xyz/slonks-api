@@ -166,6 +166,13 @@ export const slopGameProofStateAbi = [
 
 export const slopGameAbi = [
   {
+    type: "function",
+    name: "isSlopClaimPending",
+    stateMutability: "view",
+    inputs: [{ name: "tokenId", type: "uint256" }],
+    outputs: [{ type: "bool" }],
+  },
+  {
     type: "event",
     name: "SlonkLockedForSlop",
     inputs: [
