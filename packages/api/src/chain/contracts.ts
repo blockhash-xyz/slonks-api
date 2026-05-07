@@ -2,12 +2,14 @@ import type { Address } from "viem";
 import { mainnet } from "viem/chains";
 
 // Verified live on mainnet via slonks.slonksRenderer() / renderer.imageModel() etc.
-// Same as slonks-web's MAINNET_DEPLOYMENT.
+// Active mainnet addresses are mirrored from ../llm-punks/docs/mainnet-addresses.md.
 export const CONTRACTS = {
   slonks: "0x832233ddb7bcffd0ed53127dd6be3f1aa5845108" as Address,
-  renderer: "0x12b6f7572bcdd175b97b080ce3a6b2211a59c299" as Address,
+  renderer: "0x5e68c484ef6dba6e6f27243e6c668674065c1066" as Address,
   imageModel: "0xca116243a2013ed33015c776ee37310b199ee80c" as Address,
-  mergeManager: "0x3e5bb2a724dbe9a6afe04ae7581639367693f51c" as Address,
+  mergeManager: "0x7bda4820dbcfe471a2e23d3fa069c1cd261401e1" as Address,
+  legacyMergeManagers: ["0x3e5bb2a724dbe9a6afe04ae7581639367693f51c" as Address],
+  slopGame: "0xb4ffbcce990a9a0b5f84722ba2d5db4e7bfc9d11" as Address,
   cryptoPunksData: "0x16f5a35647d6f03d5d3da7b35409d65ba03af3b2" as Address,
 } as const;
 

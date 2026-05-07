@@ -67,7 +67,7 @@ export async function syncOnce(): Promise<void> {
         toBlock: to,
       }),
       client.getLogs({
-        address: CONTRACTS.mergeManager,
+        address: [CONTRACTS.mergeManager, ...CONTRACTS.legacyMergeManagers],
         fromBlock: from,
         toBlock: to,
       }),
