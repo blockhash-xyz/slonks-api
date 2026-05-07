@@ -38,9 +38,9 @@ primary_region = "iad"
 
 [[vm]]
   processes = ["web"]
-  memory = "1024mb"
-  cpu_kind = "shared"
-  cpus = 1
+  memory = "8192mb"
+  cpu_kind = "performance"
+  cpus = 2
 
 [[vm]]
   processes = ["indexer"]

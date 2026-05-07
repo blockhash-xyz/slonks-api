@@ -16,9 +16,9 @@ https://api.slonks.xyz
 
 ## Docs
 
-- [API package](packages/api/README.md): endpoint reference, indexed events, data shapes, environment variables, and Fly deploy notes.
+- [API package](packages/api/README.md): endpoint reference, indexed events, void proof generation, data shapes, environment variables, and Fly deploy notes.
 - [Core package](packages/core/README.md): shared rendering, blending, diff, palette, and attribute utilities.
-- [CLI package](packages/cli/README.md): install and command reference for `slonks mine` and `slonks global-l1`.
+- [CLI package](packages/cli/README.md): install and command reference for `slonks mine`, `slonks global-l1`, and `slonks prove`.
 
 ## Contracts
 
@@ -57,6 +57,7 @@ Run the CLI from source:
 ```bash
 bun run cli -- --help
 bun run cli -- mine --owner 0x...
+bun run cli -- prove 1819
 ```
 
 Deploy the API:

@@ -2,8 +2,8 @@
 
 Private package for the Slonks indexer and HTTP API. The API mirrors the
 on-chain Slonks rendering math so apps can read token snapshots, pixels, merge
-previews, listings, holders, and activity without doing huge `eth_call`s from
-the browser.
+previews, listings, holders, activity, and void proofs without doing huge
+`eth_call`s or local proof generation from the browser.
 
 Public API:
 
@@ -67,6 +67,8 @@ locally from the bundled model weights.
   - `slopMask`: 72 bytes.
 - Most list endpoints use `page`, `limit`, `hasMore`, and `nextPage`.
 - `/activity` uses cursor pagination with `nextCursor`.
+- Proof generation endpoints are `POST` and use `no-store`; the API keeps a
+  small in-process proof cache keyed by token state.
 - Cacheable `GET` responses include `Cache-Control`, `CDN-Cache-Control`,
   `ETag`, `Vary: Origin`, and `X-Slonks-Cache` headers.
 - Errors are shaped like `{ "error": "message" }`.
@@ -90,6 +92,8 @@ Current shared-cache TTLs:
 
 `X-Slonks-Cache` is `MISS`, `HIT`, or `BYPASS` for the API's in-process cache.
 Health checks and upstream listing errors use `no-store`.
+Void proof responses also use `no-store`; proof bytes are cached only inside the
+web process for a short TTL so repeated UI clicks do not rerun Barretenberg.
 
 ## Data Shapes
 
@@ -548,6 +552,51 @@ Returns:
 }
 ```
 
+### `POST /void-proof`
+
+Generates the UltraHonk proof and public inputs needed by the voiding contract.
+Alias: `POST /proofs/void`.
+
+The API reads current chain state, automatically chooses the active revival
+embedding, merge embedding, or source embedding, writes the Noir prover inputs,
+runs `nargo execute`, and runs Barretenberg `bb prove --verify`.
+
+Body:
+
+```json
+{ "tokenId": 1819 }
+```
+
+Returns:
+
+```ts
+type VoidProof = {
+  chainId: 1;
+  tokenId: number;
+  sourceId: number;
+  inputSource: "active embedding" | "merge embedding" | "source embedding";
+  embedding: `0x${string}`;
+  proof: `0x${string}`;
+  publicInputs: `0x${string}`[]; // bytes32[]
+  proofBytes: number;
+  publicInputsBytes: number;
+  contracts: {
+    slonks: string;
+    renderer: string;
+    imageModel: string;
+    mergeManager: string;
+    activeState: string | null;
+  };
+  generatedAt: string;
+};
+```
+
+Errors:
+
+- `400`: invalid JSON body or token id.
+- `429`: prover is busy with another token; retry shortly.
+- `503`: proof generation is disabled or prover binaries are unavailable.
+
 ## Event Shapes
 
 ```ts
@@ -610,6 +659,13 @@ files hit 100% line, function, and statement coverage.
 - `RPC_URL`: optional fallback RPC URL.
 - `OPENSEA_API_KEY`: optional; enables `/listings`.
 - `OPENSEA_SLUG`: optional; defaults to `slonks`.
+- `SLOP_PROVER_ENABLED`: optional; defaults to `true`.
+- `SLOP_PROVER_WORK_DIR`: optional; defaults to `/tmp/slonks-prover/slop_model_proof`.
+- `SLOP_PROVER_CACHE_TTL_MS`: optional in-process proof cache TTL. Default `600000`.
+- `SLOP_PROVER_MAX_CACHE_ENTRIES`: optional max cached proof entries. Default `50`.
+- `SLOP_PROVER_TIMEOUT_MS`: optional timeout per prover command. Default `120000`.
+- `NARGO_BIN`: optional path override for `nargo`.
+- `BB_BIN`: optional path override for `bb`.
 - `START_BLOCK`: optional indexer start block override.
 - `LOG_RANGE`: eth_getLogs block range. Default `2000`.
 - `SYNC_INTERVAL_MS`: indexer loop delay. Default `12000`.
@@ -626,4 +682,6 @@ bun run deploy:api
 ```
 
 The `web` process serves HTTP. The `indexer` process runs the sync loop. Both share
-the same Postgres database.
+the same Postgres database. The Docker image installs pinned `nargo` and `bb`
+binaries for `/void-proof`. Proof generation needs an 8GB performance web VM on
+Fly; smaller shared VMs can be killed by the OS while `nargo` builds the witness.

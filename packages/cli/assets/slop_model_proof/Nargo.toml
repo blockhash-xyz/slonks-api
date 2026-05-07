@@ -1,0 +1,6 @@
+[package]
+name = "slop_model_proof"
+type = "bin"
+authors = ["Slonks"]
+
+[dependencies]

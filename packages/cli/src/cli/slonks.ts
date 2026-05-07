@@ -2,6 +2,7 @@
 
 import { runSlopMiner } from "./miner.ts";
 import { runGlobalL1 } from "./globalL1.ts";
+import { runProve } from "./prove.ts";
 
 type Command = {
   description: string;
@@ -16,6 +17,10 @@ const COMMANDS: Record<string, Command> = {
   "global-l1": {
     description: "Check every one-level merge between unmerged tokens",
     run: runGlobalL1,
+  },
+  prove: {
+    description: "Generate a void proof for a Slonk",
+    run: runProve,
   },
 };
 
@@ -76,7 +81,7 @@ function isHelp(arg: string): boolean {
 
 function usage() {
   const commandHelp = Object.entries(COMMANDS)
-    .map(([name, entry]) => `  ${name.padEnd(9)} ${entry.description}`)
+    .map(([name, entry]) => `  ${name.padEnd(10)} ${entry.description}`)
     .join("\n");
 
   console.log(`Usage:

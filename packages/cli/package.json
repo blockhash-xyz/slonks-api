@@ -10,6 +10,7 @@
     "test": "cd ../.. && bun test packages/cli"
   },
   "files": [
+    "assets",
     "LICENSE",
     "src/cli",
     "README.md"
@@ -37,6 +38,7 @@
   ],
   "license": "MIT",
   "dependencies": {
-    "@blockhash/slonks-core": "0.1.0"
+    "@blockhash/slonks-core": "0.1.0",
+    "viem": "^2.38.4"
   }
 }

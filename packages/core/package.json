@@ -18,7 +18,8 @@
     "./diff": "./src/diff.ts",
     "./hex": "./src/hex.ts",
     "./imageModel": "./src/imageModel.ts",
-    "./palette": "./src/palette.ts"
+    "./palette": "./src/palette.ts",
+    "./proof": "./src/proof.ts"
   },
   "repository": {
     "type": "git",

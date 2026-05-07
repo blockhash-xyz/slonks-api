@@ -31,6 +31,13 @@ export const slonksAbi = [
     inputs: [{ name: "tokenId", type: "uint256" }],
     outputs: [{ type: "address" }],
   },
+  {
+    type: "function",
+    name: "slonksRenderer",
+    stateMutability: "view",
+    inputs: [],
+    outputs: [{ type: "address" }],
+  },
 
   // events
   {
@@ -75,6 +82,30 @@ export const slonksAbi = [
   },
 ] as const;
 
+export const slonksRendererAbi = [
+  {
+    type: "function",
+    name: "imageModel",
+    stateMutability: "view",
+    inputs: [],
+    outputs: [{ type: "address" }],
+  },
+  {
+    type: "function",
+    name: "mergeManager",
+    stateMutability: "view",
+    inputs: [],
+    outputs: [{ type: "address" }],
+  },
+  {
+    type: "function",
+    name: "activeState",
+    stateMutability: "view",
+    inputs: [],
+    outputs: [{ type: "address" }],
+  },
+] as const;
+
 export const slonksImageModelAbi = [
   {
     type: "function",
@@ -96,6 +127,40 @@ export const slonksImageModelAbi = [
     stateMutability: "view",
     inputs: [{ name: "embedding", type: "bytes" }],
     outputs: [{ type: "bytes" }],
+  },
+] as const;
+
+export const slonksActiveStateAbi = [
+  {
+    type: "function",
+    name: "hasActiveEmbedding",
+    stateMutability: "view",
+    inputs: [{ name: "tokenId", type: "uint256" }],
+    outputs: [{ type: "bool" }],
+  },
+  {
+    type: "function",
+    name: "activeEmbedding",
+    stateMutability: "view",
+    inputs: [{ name: "tokenId", type: "uint256" }],
+    outputs: [{ type: "bytes" }],
+  },
+] as const;
+
+export const slopGameProofStateAbi = [
+  {
+    type: "function",
+    name: "imageModel",
+    stateMutability: "view",
+    inputs: [],
+    outputs: [{ type: "address" }],
+  },
+  {
+    type: "function",
+    name: "mergeState",
+    stateMutability: "view",
+    inputs: [],
+    outputs: [{ type: "address" }],
   },
 ] as const;
 

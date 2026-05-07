@@ -109,6 +109,39 @@ Options:
 - `--max-tokens N`: testing cap; omit for the full unmerged collection.
 - `--json`: emit machine-readable JSON.
 
+## `slonks prove`
+
+Generate the UltraHonk proof and public inputs needed to call the voiding
+contract for a Slonk. The command reads the Slonk's current contract state and
+automatically uses the right proof input: active revival embedding when present,
+then merge embedding, then source embedding.
+
+```bash
+RPC_URL=https://eth-mainnet.g.alchemy.com/v2/... slonks prove 1819 --out ./proofs
+```
+
+Machine-readable output includes the proof bytes and `bytes32[]` public inputs:
+
+```bash
+RPC_URL=https://eth-mainnet.g.alchemy.com/v2/... slonks prove 1819 --json
+```
+
+Options:
+
+- `--rpc-url URL`: Ethereum RPC URL. Defaults to `RPC_URL`, `ETH_RPC_URL`, `MAINNET_RPC_URL`, `ALCHEMY_RPC_URL`, or `SEPOLIA_RPC_URL`.
+- `--slonks ADDRESS`: Slonks contract address. Defaults to the known mainnet or Sepolia deployment for the RPC chain.
+- `--work-dir DIR`: prover workspace/cache. Default: `~/.slonks/prover/slop_model_proof`.
+- `--out DIR`: copy `proof` and `public_inputs` files to this directory.
+- `--nargo PATH`: `nargo` binary. Default: `nargo`.
+- `--bb PATH`: Barretenberg binary. Default: `~/.bb/bb` when present, otherwise `bb`.
+- `--json`: emit proof, public inputs, discovered contracts, source id, and embedding as JSON.
+
+Requirements:
+
+- Bun `>=1.2.0`
+- `nargo`
+- `bb`
+
 ## Development
 
 Run from the repo root:
@@ -116,6 +149,7 @@ Run from the repo root:
 ```bash
 bun run cli -- --help
 bun run cli -- mine --owner 0x...
+bun run cli -- prove 1819
 bun test packages/cli
 ```
 

@@ -21,6 +21,7 @@ Inside this monorepo it is consumed by `@blockhash/slonks-api` and
 - `@blockhash/slonks-core/hex`: convert between `Uint8Array` and `0x` hex.
 - `@blockhash/slonks-core/imageModel`: load bundled model weights, render source/merge embeddings, and compute rendered slop locally.
 - `@blockhash/slonks-core/palette`: CryptoPunks palette constants and decoder.
+- `@blockhash/slonks-core/proof`: pack model proof inputs and decode Barretenberg proof artifacts.
 
 ## Model Data
 
