@@ -149,8 +149,18 @@ describe("API cache helpers", () => {
       c.header("Content-Type", "image/png");
       return c.body(new Uint8Array([1, 2, 3]));
     });
+    app.get("/void/pending-claims", (c) => {
+      setCache(c, { sMaxage: 10, staleWhileRevalidate: 20 });
+      return c.json({ items: [] });
+    });
 
-    for (const path of ["/listings", "/tokens?ids=1,2", "/tokens?include=pixels", "/owners/0xabc/tokens"]) {
+    for (const path of [
+      "/listings",
+      "/tokens?ids=1,2",
+      "/tokens?include=pixels",
+      "/owners/0xabc/tokens",
+      "/void/pending-claims?include=pixels",
+    ]) {
       const res = await app.request(path);
       expect(res.headers.get("X-Slonks-Cache")).toBe("BYPASS");
       expect(res.headers.get("ETag")).toBeNull();
@@ -158,6 +168,7 @@ describe("API cache helpers", () => {
 
     expect((await app.request("/collection/status")).headers.get("X-Slonks-Cache")).toBe("MISS");
     expect((await app.request("/tokens")).headers.get("X-Slonks-Cache")).toBe("MISS");
+    expect((await app.request("/void/pending-claims")).headers.get("X-Slonks-Cache")).toBe("MISS");
     expect((await app.request("/png/1")).headers.get("X-Slonks-Cache")).toBe("MISS");
     expect((await app.request("/png/1")).headers.get("X-Slonks-Cache")).toBe("HIT");
   });

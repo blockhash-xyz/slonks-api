@@ -20,6 +20,7 @@ async function readState() {
     sourcesPrecomputed: 0,
     lastIndexedBlock: 0n,
     proofWarmupLastIndexedBlock: 0n,
+    gameClaimsLastIndexedBlock: 0n,
     updatedAt: new Date(),
   };
 }

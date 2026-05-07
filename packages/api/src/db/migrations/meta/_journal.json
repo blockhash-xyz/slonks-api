@@ -36,6 +36,13 @@
       "when": 1778176500000,
       "tag": "0004_lower_void_proof_warmup_priority",
       "breakpoints": true
+    },
+    {
+      "idx": 5,
+      "version": "7",
+      "when": 1778180400000,
+      "tag": "0005_slop_claims",
+      "breakpoints": true
     }
   ]
 }

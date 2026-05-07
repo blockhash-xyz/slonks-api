@@ -36,6 +36,7 @@ export const CACHE = {
   tokenList: { sMaxage: 30, staleWhileRevalidate: 120, staleIfError: 300 },
   owner: { sMaxage: 30, staleWhileRevalidate: 120, staleIfError: 300 },
   activity: { sMaxage: 5, staleWhileRevalidate: 30, staleIfError: 120 },
+  pendingClaims: { sMaxage: 5, staleWhileRevalidate: 30, staleIfError: 120 },
   listings: { sMaxage: 20, staleWhileRevalidate: 60, staleIfError: 120 },
   preview: { sMaxage: 30, staleWhileRevalidate: 120, staleIfError: 300 },
 } as const satisfies Record<string, CachePolicy>;
@@ -190,6 +191,11 @@ function isMicrocacheCandidate(c: Context): boolean {
   if (/^\/tokens\/\d+$/.test(path)) return true;
   if (/^\/png\/\d+$/.test(path)) return true;
   if (/^\/owners\/[^/]+\/summary$/.test(path)) return true;
+
+  if (path === "/void/pending-claims") {
+    if (includeParam(url.searchParams.get("include"), "pixels")) return false;
+    return true;
+  }
 
   if (path === "/tokens") {
     if (url.searchParams.has("ids")) return false;

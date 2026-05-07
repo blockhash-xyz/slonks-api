@@ -93,6 +93,38 @@ export const transfers = pgTable(
   }),
 );
 
+// Current SlopGame claim lifecycle per token. Pending rows are Slonks locked in
+// the active game contract that still need/await a SLOP claim.
+export const slopClaims = pgTable(
+  "slop_claims",
+  {
+    tokenId: integer("token_id").primaryKey(),
+    status: text("status").notNull().default("pending"), // pending | unlocked | claimed | voided
+    recipient: text("recipient"),
+    submitter: text("submitter"),
+    slop: smallint("slop"),
+    mintedAmount: text("minted_amount"),
+    lockedAtBlock: bigint("locked_at_block", { mode: "bigint" }),
+    lockedAtLogIndex: integer("locked_at_log_index"),
+    lockedAtTxHash: text("locked_at_tx_hash"),
+    lockedAtTimestamp: timestamp("locked_at_timestamp", { withTimezone: true }),
+    unlockedAtBlock: bigint("unlocked_at_block", { mode: "bigint" }),
+    unlockedAtLogIndex: integer("unlocked_at_log_index"),
+    unlockedAtTxHash: text("unlocked_at_tx_hash"),
+    unlockedAtTimestamp: timestamp("unlocked_at_timestamp", { withTimezone: true }),
+    claimedAtBlock: bigint("claimed_at_block", { mode: "bigint" }),
+    claimedAtLogIndex: integer("claimed_at_log_index"),
+    claimedAtTxHash: text("claimed_at_tx_hash"),
+    claimedAtTimestamp: timestamp("claimed_at_timestamp", { withTimezone: true }),
+    updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
+  },
+  (t) => ({
+    statusIdx: index("slop_claims_status_idx").on(t.status),
+    recipientIdx: index("slop_claims_recipient_idx").on(t.recipient),
+    lockedAtIdx: index("slop_claims_locked_at_idx").on(t.lockedAtBlock, t.lockedAtLogIndex),
+  }),
+);
+
 // Full SlonkMerged log. Donor → Survivor edges form the merge ancestry graph.
 export const merges = pgTable(
   "merges",
@@ -125,6 +157,9 @@ export const collectionState = pgTable("collection_state", {
   sourcesPrecomputed: integer("sources_precomputed").notNull().default(0),
   lastIndexedBlock: bigint("last_indexed_block", { mode: "bigint" }).notNull().default(sql`0`),
   proofWarmupLastIndexedBlock: bigint("proof_warmup_last_indexed_block", { mode: "bigint" })
+    .notNull()
+    .default(sql`0`),
+  gameClaimsLastIndexedBlock: bigint("game_claims_last_indexed_block", { mode: "bigint" })
     .notNull()
     .default(sql`0`),
   updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
@@ -183,6 +218,7 @@ export const voidProofJobs = pgTable(
 export type SourcePunkRow = typeof sourcePunks.$inferSelect;
 export type TokenRow = typeof tokens.$inferSelect;
 export type TransferRow = typeof transfers.$inferSelect;
+export type SlopClaimRow = typeof slopClaims.$inferSelect;
 export type MergeRow = typeof merges.$inferSelect;
 export type CollectionStateRow = typeof collectionState.$inferSelect;
 export type VoidProofRow = typeof voidProofs.$inferSelect;

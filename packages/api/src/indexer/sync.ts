@@ -19,7 +19,7 @@ import { CONTRACTS, MAX_SUPPLY, SLONKS_DEPLOY_BLOCK } from "../chain/contracts.t
 import { publicClient } from "../chain/client.ts";
 import { env } from "../env.ts";
 import { db } from "../db/client.ts";
-import { collectionState, tokens } from "../db/schema.ts";
+import { collectionState, slopClaims, tokens } from "../db/schema.ts";
 import {
   applyMergeRender,
   ensureToken,
@@ -196,7 +196,10 @@ async function processMergeLogs(logs: Log[]): Promise<void> {
 
 async function syncProofWarmupLogs(client: PublicClient, safeLatest: bigint): Promise<void> {
   const [stateRow] = await db
-    .select({ proofWarmupLastIndexedBlock: collectionState.proofWarmupLastIndexedBlock })
+    .select({
+      proofWarmupLastIndexedBlock: collectionState.proofWarmupLastIndexedBlock,
+      gameClaimsLastIndexedBlock: collectionState.gameClaimsLastIndexedBlock,
+    })
     .from(collectionState)
     .where(eq(collectionState.id, 1))
     .limit(1);
@@ -206,8 +209,15 @@ async function syncProofWarmupLogs(client: PublicClient, safeLatest: bigint): Pr
   if (!gameAddress) return;
 
   const startFrom = env.START_BLOCK ?? SLONKS_DEPLOY_BLOCK;
-  let from =
-    stateRow.proofWarmupLastIndexedBlock === 0n ? startFrom : stateRow.proofWarmupLastIndexedBlock + 1n;
+  let proofCursor = stateRow.proofWarmupLastIndexedBlock;
+  let gameClaimsCursor = stateRow.gameClaimsLastIndexedBlock;
+  const earliestCursor =
+    proofCursor === 0n || gameClaimsCursor === 0n
+      ? 0n
+      : proofCursor < gameClaimsCursor
+        ? proofCursor
+        : gameClaimsCursor;
+  let from = earliestCursor === 0n ? startFrom : earliestCursor + 1n;
   if (from > safeLatest) return;
 
   const range = env.LOG_RANGE;
@@ -219,10 +229,21 @@ async function syncProofWarmupLogs(client: PublicClient, safeLatest: bigint): Pr
       toBlock: to,
     });
 
-    await processSlopGameLogs(gameLogs);
+    await processSlopGameLogs(gameLogs, {
+      claimAfterBlock: gameClaimsCursor,
+      warmProofAfterBlock: proofCursor,
+    });
+
+    if (gameClaimsCursor < to) gameClaimsCursor = to;
+    if (proofCursor < to) proofCursor = to;
+
     await db
       .update(collectionState)
-      .set({ proofWarmupLastIndexedBlock: to, updatedAt: new Date() })
+      .set({
+        proofWarmupLastIndexedBlock: proofCursor,
+        gameClaimsLastIndexedBlock: gameClaimsCursor,
+        updatedAt: new Date(),
+      })
       .where(eq(collectionState.id, 1));
 
     from = to + 1n;
@@ -250,7 +271,10 @@ async function readActiveSlopGameAddress(client: PublicClient): Promise<Address 
   }
 }
 
-async function processSlopGameLogs(logs: Log[]): Promise<void> {
+async function processSlopGameLogs(
+  logs: Log[],
+  options: { claimAfterBlock?: bigint; warmProofAfterBlock?: bigint } = {},
+): Promise<void> {
   for (const log of logs) {
     let decoded;
     try {
@@ -263,13 +287,222 @@ async function processSlopGameLogs(logs: Log[]): Promise<void> {
     } catch {
       continue;
     }
-    if (decoded.eventName !== "SlonkLockedForSlop") continue;
+    if (!log.blockNumber || log.logIndex == null || !log.transactionHash) continue;
 
-    const args = decoded.args as { tokenId: bigint; owner: `0x${string}` };
+    const args = decoded.args as {
+      tokenId?: bigint;
+      owner?: `0x${string}`;
+      recipient?: `0x${string}`;
+      submitter?: `0x${string}`;
+      voider?: `0x${string}`;
+      buyer?: `0x${string}`;
+      target?: `0x${string}`;
+      slop?: bigint;
+      mintedAmount?: bigint;
+    };
+    if (args.tokenId == null) continue;
     const tokenId = Number(args.tokenId);
     if (tokenId < 0 || tokenId >= MAX_SUPPLY) continue;
-    await warmVoidProof(tokenId, `SlonkLockedForSlop ${log.transactionHash ?? ""}`.trim());
+
+    if (decoded.eventName === "SlonkLockedForSlop" && shouldProcessGameEvent(log.blockNumber, options.warmProofAfterBlock)) {
+      await warmVoidProof(tokenId, `SlonkLockedForSlop ${log.transactionHash}`.trim());
+    }
+
+    if (!shouldProcessGameEvent(log.blockNumber, options.claimAfterBlock)) continue;
+
+    switch (decoded.eventName) {
+      case "SlonkLockedForSlop": {
+        if (!args.owner) break;
+        const blockTimestamp = await blockTime(log.blockNumber);
+        await db
+          .insert(slopClaims)
+          .values({
+            tokenId,
+            status: "pending",
+            recipient: args.owner.toLowerCase(),
+            submitter: null,
+            slop: null,
+            mintedAmount: null,
+            lockedAtBlock: log.blockNumber,
+            lockedAtLogIndex: log.logIndex,
+            lockedAtTxHash: log.transactionHash,
+            lockedAtTimestamp: blockTimestamp,
+            unlockedAtBlock: null,
+            unlockedAtLogIndex: null,
+            unlockedAtTxHash: null,
+            unlockedAtTimestamp: null,
+            claimedAtBlock: null,
+            claimedAtLogIndex: null,
+            claimedAtTxHash: null,
+            claimedAtTimestamp: null,
+            updatedAt: new Date(),
+          })
+          .onConflictDoUpdate({
+            target: slopClaims.tokenId,
+            set: {
+              status: "pending",
+              recipient: args.owner.toLowerCase(),
+              submitter: null,
+              slop: null,
+              mintedAmount: null,
+              lockedAtBlock: log.blockNumber,
+              lockedAtLogIndex: log.logIndex,
+              lockedAtTxHash: log.transactionHash,
+              lockedAtTimestamp: blockTimestamp,
+              unlockedAtBlock: null,
+              unlockedAtLogIndex: null,
+              unlockedAtTxHash: null,
+              unlockedAtTimestamp: null,
+              claimedAtBlock: null,
+              claimedAtLogIndex: null,
+              claimedAtTxHash: null,
+              claimedAtTimestamp: null,
+              updatedAt: new Date(),
+            },
+          });
+        break;
+      }
+      case "SlonkUnlockedFromSlop": {
+        if (!args.owner) break;
+        const blockTimestamp = await blockTime(log.blockNumber);
+        await db
+          .insert(slopClaims)
+          .values({
+            tokenId,
+            status: "unlocked",
+            recipient: args.owner.toLowerCase(),
+            unlockedAtBlock: log.blockNumber,
+            unlockedAtLogIndex: log.logIndex,
+            unlockedAtTxHash: log.transactionHash,
+            unlockedAtTimestamp: blockTimestamp,
+            updatedAt: new Date(),
+          })
+          .onConflictDoUpdate({
+            target: slopClaims.tokenId,
+            set: {
+              status: "unlocked",
+              recipient: args.owner.toLowerCase(),
+              unlockedAtBlock: log.blockNumber,
+              unlockedAtLogIndex: log.logIndex,
+              unlockedAtTxHash: log.transactionHash,
+              unlockedAtTimestamp: blockTimestamp,
+              updatedAt: new Date(),
+            },
+          });
+        break;
+      }
+      case "SlonkVoided": {
+        if (!args.owner) break;
+        const blockTimestamp = await blockTime(log.blockNumber);
+        await markClaimed({
+          tokenId,
+          recipient: args.owner.toLowerCase(),
+          submitter: null,
+          slop: args.slop,
+          mintedAmount: args.mintedAmount,
+          blockNumber: log.blockNumber,
+          logIndex: log.logIndex,
+          txHash: log.transactionHash,
+          blockTimestamp,
+        });
+        break;
+      }
+      case "SlopClaimed": {
+        if (!args.recipient) break;
+        const blockTimestamp = await blockTime(log.blockNumber);
+        await markClaimed({
+          tokenId,
+          recipient: args.recipient.toLowerCase(),
+          submitter: args.submitter?.toLowerCase() ?? null,
+          slop: args.slop,
+          mintedAmount: args.mintedAmount,
+          blockNumber: log.blockNumber,
+          logIndex: log.logIndex,
+          txHash: log.transactionHash,
+          blockTimestamp,
+        });
+        break;
+      }
+      case "SlonkProtocolVoided":
+      case "SlonkBoughtAndVoided": {
+        const blockTimestamp = await blockTime(log.blockNumber);
+        await db
+          .insert(slopClaims)
+          .values({
+            tokenId,
+            status: "voided",
+            recipient: args.target?.toLowerCase() ?? null,
+            submitter: args.voider?.toLowerCase() ?? args.buyer?.toLowerCase() ?? null,
+            claimedAtBlock: log.blockNumber,
+            claimedAtLogIndex: log.logIndex,
+            claimedAtTxHash: log.transactionHash,
+            claimedAtTimestamp: blockTimestamp,
+            updatedAt: new Date(),
+          })
+          .onConflictDoUpdate({
+            target: slopClaims.tokenId,
+            set: {
+              status: "voided",
+              recipient: args.target?.toLowerCase() ?? null,
+              submitter: args.voider?.toLowerCase() ?? args.buyer?.toLowerCase() ?? null,
+              claimedAtBlock: log.blockNumber,
+              claimedAtLogIndex: log.logIndex,
+              claimedAtTxHash: log.transactionHash,
+              claimedAtTimestamp: blockTimestamp,
+              updatedAt: new Date(),
+            },
+          });
+        break;
+      }
+    }
   }
+}
+
+function shouldProcessGameEvent(blockNumber: bigint, afterBlock: bigint | undefined): boolean {
+  return afterBlock == null || blockNumber > afterBlock;
+}
+
+async function markClaimed(args: {
+  tokenId: number;
+  recipient: string;
+  submitter: string | null;
+  slop: bigint | undefined;
+  mintedAmount: bigint | undefined;
+  blockNumber: bigint;
+  logIndex: number;
+  txHash: string;
+  blockTimestamp: Date;
+}): Promise<void> {
+  await db
+    .insert(slopClaims)
+    .values({
+      tokenId: args.tokenId,
+      status: "claimed",
+      recipient: args.recipient,
+      submitter: args.submitter,
+      slop: args.slop == null ? null : Number(args.slop),
+      mintedAmount: args.mintedAmount?.toString() ?? null,
+      claimedAtBlock: args.blockNumber,
+      claimedAtLogIndex: args.logIndex,
+      claimedAtTxHash: args.txHash,
+      claimedAtTimestamp: args.blockTimestamp,
+      updatedAt: new Date(),
+    })
+    .onConflictDoUpdate({
+      target: slopClaims.tokenId,
+      set: {
+        status: "claimed",
+        recipient: args.recipient,
+        submitter: args.submitter,
+        slop: args.slop == null ? null : Number(args.slop),
+        mintedAmount: args.mintedAmount?.toString() ?? null,
+        claimedAtBlock: args.blockNumber,
+        claimedAtLogIndex: args.logIndex,
+        claimedAtTxHash: args.txHash,
+        claimedAtTimestamp: args.blockTimestamp,
+        updatedAt: new Date(),
+      },
+    });
 }
 
 async function refreshCollection(safeLatest: bigint): Promise<void> {

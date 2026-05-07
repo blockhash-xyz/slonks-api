@@ -13,6 +13,7 @@ import { mergePreviews } from "./routes/mergePreviews.ts";
 import { listings } from "./routes/listings.ts";
 import { holders } from "./routes/holders.ts";
 import { voidProof } from "./routes/voidProof.ts";
+import { voidRoutes } from "./routes/void.ts";
 import { png } from "./routes/png.ts";
 
 export function buildApp() {
@@ -37,6 +38,7 @@ export function buildApp() {
   app.route("/merge-previews", mergePreviews);
   app.route("/listings", listings);
   app.route("/holders", holders);
+  app.route("/void", voidRoutes);
   app.route("/void-proof", voidProof);
   app.route("/proofs/void", voidProof);
   app.route("/png", png);

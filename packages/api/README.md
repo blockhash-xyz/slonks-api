@@ -36,6 +36,8 @@ https://api.slonks.xyz
 - `Slonks` `RevealCommitted` and `Revealed`: collection phase and `shuffleOffset`.
 - `Slonks` `BatchMetadataUpdate` / `MetadataUpdate`: cache invalidation hints.
 - Active and legacy `SlonksMergeManager` `SlonkMerged`: donor-to-survivor merge edges, resulting merge level, and cumulative embedding.
+- Active `SlopGame` claim events: Slonks locked for SLOP, unlocked, claimed,
+  protocol-voided, and bought-and-voided.
 
 ## What It Precomputes
 
@@ -91,6 +93,7 @@ Current shared-cache TTLs:
 - Token PNG images: 1 hour.
 - Token lists, owner endpoints, and holders: 30 seconds.
 - Activity feed: 5 seconds.
+- Pending void claims: 5 seconds.
 - OpenSea listings: 20 seconds.
 
 `X-Slonks-Cache` is `MISS`, `HIT`, or `BYPASS` for the API's in-process cache.
@@ -444,6 +447,47 @@ Returns:
   >;
   hasMore: boolean;
   nextCursor: string | null;
+}
+```
+
+### `GET /void/pending-claims`
+
+Slonks currently locked in the active SlopGame with a pending SLOP claim. These
+tokens are owned by the game contract onchain, but `claimRecipient` is the
+address that locked the Slonk and will receive the SLOP when claimed.
+
+Query params:
+
+- `owner` or `recipient`: filter to the recorded claim recipient.
+- `page`: default `1`.
+- `limit`: default `50`, max `200`.
+- `include`: add `pixels` to include `generatedPixels` and `originalRgba`.
+
+Example:
+
+```bash
+curl -sS "https://api.slonks.xyz/void/pending-claims?owner=0x2052051a0474fb0b98283b3f38c13b0b0b6a3677"
+```
+
+Returns:
+
+```ts
+{
+  chainId: 1;
+  owner?: string;
+  count: number;
+  page: number;
+  limit: number;
+  hasMore: boolean;
+  nextPage: number | null;
+  items: Array<TokenListItem & {
+    claimStatus: "pending";
+    claimRecipient: string | null;
+    lockedAtBlock: string | null;
+    lockedAtLogIndex: number | null;
+    lockedAtTxHash: string | null;
+    lockedAtTimestamp: string | null;
+  }>;
 }
 ```
 
