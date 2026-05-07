@@ -600,6 +600,16 @@ type VoidProof = {
   publicInputs: `0x${string}`[]; // bytes32[]
   proofBytes: number;
   publicInputsBytes: number;
+  timingsMs: {
+    total: number;
+    ensureCircuit: number;
+    renderPixels: number;
+    writeInputs: number;
+    nargoExecute: number;
+    ensureVerificationKey: number;
+    bbProve: number;
+    readArtifacts: number;
+  };
   contracts: {
     slonks: string;
     renderer: string;
@@ -715,3 +725,8 @@ The `slonks-prover` app runs a proof-only HTTP process on a 16 CPU / 32GB
 performance VM with `min_machines_running = 0`, so Fly can stop it when idle and
 autostart it for the next proof request. Smaller shared VMs can be killed by the
 OS while `nargo` builds the witness.
+
+The prover image precompiles the Noir circuit and verification key at build
+time. The public API resolves token chain state, then sends the token id,
+source id, current embedding, and contract addresses to the prover so proof
+machines do not need their own RPC provider.

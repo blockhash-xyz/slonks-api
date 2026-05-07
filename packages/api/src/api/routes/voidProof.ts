@@ -1,9 +1,19 @@
 import { Hono } from "hono";
 import type { Context } from "hono";
 import type { ContentfulStatusCode } from "hono/utils/http-status";
+import { ensureEmbeddingHex, type ProofInputSource } from "@blockhash/slonks-core/proof";
+import { getAddress, type Address, type Hex } from "viem";
 import { env } from "../../env.ts";
 import { setNoStore } from "../cache.ts";
-import { generateVoidProof, ProverBusyError, ProverUnavailableError } from "../../prover/voidProof.ts";
+import {
+  generateVoidProof,
+  generateVoidProofFromResolved,
+  ProverBusyError,
+  ProverUnavailableError,
+  resolveVoidProofRequest,
+  type ProofContracts,
+  type ResolvedVoidProofRequest,
+} from "../../prover/voidProof.ts";
 
 export const voidProof = new Hono();
 
@@ -17,10 +27,18 @@ voidProof.post("/", async (c) => {
   const tokenId = parseTokenId(readBodyNumber(body, "tokenId", "id"), "tokenId");
   if (typeof tokenId === "string") return c.json({ error: tokenId }, 400);
 
-  if (env.SLOP_REMOTE_PROVER_URL) return remoteVoidProof(c, tokenId);
+  const resolved = parseResolvedVoidProofRequest(body, tokenId);
+  if (typeof resolved === "string") return c.json({ error: resolved }, 400);
+  if (resolved) return respondWithProof(c, () => generateVoidProofFromResolved(resolved));
 
+  if (env.SLOP_REMOTE_PROVER_URL) return remoteVoidProof(c, await resolveVoidProofRequest(tokenId));
+
+  return respondWithProof(c, () => generateVoidProof(tokenId));
+});
+
+async function respondWithProof(c: Context, build: () => Promise<unknown>): Promise<Response> {
   try {
-    const proof = await generateVoidProof(tokenId);
+    const proof = await build();
     return c.json(proof);
   } catch (err) {
     if (err instanceof ProverBusyError) {
@@ -32,9 +50,9 @@ voidProof.post("/", async (c) => {
     }
     throw err;
   }
-});
+}
 
-async function remoteVoidProof(c: Context, tokenId: number): Promise<Response> {
+async function remoteVoidProof(c: Context, request: ResolvedVoidProofRequest): Promise<Response> {
   const url = new URL("/void-proof", env.SLOP_REMOTE_PROVER_URL);
   const headers = new Headers({ "Content-Type": "application/json" });
   if (env.SLOP_PROVER_AUTH_TOKEN) headers.set("Authorization", `Bearer ${env.SLOP_PROVER_AUTH_TOKEN}`);
@@ -44,7 +62,7 @@ async function remoteVoidProof(c: Context, tokenId: number): Promise<Response> {
     response = await fetch(url, {
       method: "POST",
       headers,
-      body: JSON.stringify({ tokenId }),
+      body: JSON.stringify(request),
       signal: AbortSignal.timeout(env.SLOP_REMOTE_PROVER_TIMEOUT_MS),
     });
   } catch (err) {
@@ -59,6 +77,80 @@ async function remoteVoidProof(c: Context, tokenId: number): Promise<Response> {
   const retryAfter = response.headers.get("Retry-After");
   if (retryAfter) c.header("Retry-After", retryAfter);
   return c.json(body, response.status as ContentfulStatusCode);
+}
+
+const PROOF_INPUT_SOURCES = new Set<ProofInputSource>(["active embedding", "merge embedding", "source embedding"]);
+
+function parseResolvedVoidProofRequest(body: object, tokenId: number): ResolvedVoidProofRequest | string | null {
+  const record = body as Record<string, unknown>;
+  const hasResolvedFields =
+    record.sourceId != null || record.inputSource != null || record.embedding != null || record.contracts != null;
+  if (!hasResolvedFields) return null;
+
+  const sourceId = typeof record.sourceId === "string" ? Number(record.sourceId) : record.sourceId;
+  if (!Number.isInteger(sourceId) || typeof sourceId !== "number" || sourceId < 0 || sourceId >= 10_000) {
+    return "invalid sourceId";
+  }
+
+  if (typeof record.inputSource !== "string" || !PROOF_INPUT_SOURCES.has(record.inputSource as ProofInputSource)) {
+    return "invalid inputSource";
+  }
+
+  if (typeof record.embedding !== "string" || !record.embedding.startsWith("0x")) {
+    return "invalid embedding";
+  }
+
+  let embedding: Hex;
+  try {
+    embedding = ensureEmbeddingHex(record.embedding as Hex, "embedding");
+  } catch (err) {
+    return err instanceof Error ? err.message : "invalid embedding";
+  }
+
+  const contracts = parseProofContracts(record.contracts);
+  if (typeof contracts === "string") return contracts;
+
+  return {
+    tokenId,
+    sourceId,
+    inputSource: record.inputSource as ProofInputSource,
+    embedding,
+    contracts,
+  };
+}
+
+function parseProofContracts(raw: unknown): ProofContracts | string {
+  if (!raw || typeof raw !== "object") return "invalid contracts";
+  const contracts = raw as Record<string, unknown>;
+  const slonks = parseAddress(contracts.slonks, "contracts.slonks");
+  if (!slonks.ok) return slonks.error;
+  const renderer = parseAddress(contracts.renderer, "contracts.renderer");
+  if (!renderer.ok) return renderer.error;
+  const imageModel = parseAddress(contracts.imageModel, "contracts.imageModel");
+  if (!imageModel.ok) return imageModel.error;
+  const mergeManager = parseAddress(contracts.mergeManager, "contracts.mergeManager");
+  if (!mergeManager.ok) return mergeManager.error;
+  const activeState = contracts.activeState == null ? null : parseAddress(contracts.activeState, "contracts.activeState");
+  if (activeState && !activeState.ok) return activeState.error;
+
+  return {
+    slonks: slonks.value,
+    renderer: renderer.value,
+    imageModel: imageModel.value,
+    mergeManager: mergeManager.value,
+    activeState: activeState ? activeState.value : null,
+  };
+}
+
+type AddressParseResult = { ok: true; value: Address } | { ok: false; error: string };
+
+function parseAddress(raw: unknown, label: string): AddressParseResult {
+  if (typeof raw !== "string") return { ok: false, error: `invalid ${label}` };
+  try {
+    return { ok: true, value: getAddress(raw) };
+  } catch {
+    return { ok: false, error: `invalid ${label}` };
+  }
 }
 
 function parseJsonObject(text: string): Record<string, unknown> | null {

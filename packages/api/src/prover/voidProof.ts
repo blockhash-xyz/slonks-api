@@ -36,10 +36,22 @@ export type VoidProof = {
   proofBytes: number;
   publicInputsBytes: number;
   contracts: ProofContracts;
+  timingsMs: VoidProofTimings;
   generatedAt: string;
 };
 
-type ProofContracts = {
+export type VoidProofTimings = {
+  total: number;
+  ensureCircuit: number;
+  renderPixels: number;
+  writeInputs: number;
+  nargoExecute: number;
+  ensureVerificationKey: number;
+  bbProve: number;
+  readArtifacts: number;
+};
+
+export type ProofContracts = {
   slonks: Address;
   renderer: Address;
   imageModel: Address;
@@ -47,10 +59,15 @@ type ProofContracts = {
   activeState: Address | null;
 };
 
-type ProofInput = {
+export type ProofInput = {
   sourceId: number;
   inputSource: ProofInputSource;
   embedding: Hex;
+};
+
+export type ResolvedVoidProofRequest = ProofInput & {
+  tokenId: number;
+  contracts: ProofContracts;
 };
 
 type CacheEntry = {
@@ -87,9 +104,21 @@ export class ProverUnavailableError extends Error {
 export async function generateVoidProof(tokenId: number): Promise<VoidProof> {
   if (!env.SLOP_PROVER_ENABLED) throw new ProverUnavailableError("proof generation is disabled");
 
+  const request = await resolveVoidProofRequest(tokenId);
+  return generateVoidProofFromResolved(request);
+}
+
+export async function resolveVoidProofRequest(tokenId: number): Promise<ResolvedVoidProofRequest> {
   const client = publicClient();
   const contracts = await discoverProofContracts(client);
   const input = await resolveProofInput(client, contracts, tokenId);
+  return { tokenId, contracts, ...input };
+}
+
+export async function generateVoidProofFromResolved(request: ResolvedVoidProofRequest): Promise<VoidProof> {
+  if (!env.SLOP_PROVER_ENABLED) throw new ProverUnavailableError("proof generation is disabled");
+
+  const { tokenId, contracts, ...input } = request;
   const key = proofCacheKey(tokenId, input, contracts);
   const cached = readCache(key);
   if (cached) return cached;
@@ -226,39 +255,65 @@ async function resolveProofInput(client: PublicClient, contracts: ProofContracts
 }
 
 async function runProof(tokenId: number, input: ProofInput, contracts: ProofContracts): Promise<VoidProof> {
-  const workDir = resolve(env.SLOP_PROVER_WORK_DIR);
-  await ensureCircuitFiles(workDir);
-  const embedding = hexToBytes(input.embedding);
-  const pixels = renderEmbeddingPixelsLocal(embedding);
-  await writeProverInputs(workDir, embedding, pixels);
+  const totalStarted = performance.now();
+  const timingsMs: VoidProofTimings = {
+    total: 0,
+    ensureCircuit: 0,
+    renderPixels: 0,
+    writeInputs: 0,
+    nargoExecute: 0,
+    ensureVerificationKey: 0,
+    bbProve: 0,
+    readArtifacts: 0,
+  };
 
-  await runCommand(nargoBin(), ["execute"], workDir);
-  await ensureVerificationKey(workDir);
-  await runCommand(
-    bbBin(),
-    [
-      "prove",
-      "-s",
-      "ultra_honk",
-      "--disable_zk",
-      "--oracle_hash",
-      "keccak",
-      "-b",
-      "target/slop_model_proof.json",
-      "-w",
-      "target/slop_model_proof.gz",
-      "-k",
-      "target/proof-keccak/vk/vk",
-      "-o",
-      "target/proof-keccak/proof",
-    ],
-    workDir,
+  const workDir = resolve(env.SLOP_PROVER_WORK_DIR);
+  await timedProofPhase(timingsMs, "ensureCircuit", () => ensureCircuitFiles(workDir));
+  const { embedding, pixels } = await timedProofPhase(timingsMs, "renderPixels", async () => {
+    const embedding = hexToBytes(input.embedding);
+    return { embedding, pixels: renderEmbeddingPixelsLocal(embedding) };
+  });
+  await timedProofPhase(timingsMs, "writeInputs", () => writeProverInputs(workDir, embedding, pixels));
+
+  await timedProofPhase(timingsMs, "nargoExecute", () => runCommand(nargoBin(), ["execute"], workDir));
+  await timedProofPhase(timingsMs, "ensureVerificationKey", () => ensureVerificationKey(workDir));
+  await timedProofPhase(
+    timingsMs,
+    "bbProve",
+    () =>
+      runCommand(
+        bbBin(),
+        [
+          "prove",
+          "-s",
+          "ultra_honk",
+          "--disable_zk",
+          "--oracle_hash",
+          "keccak",
+          "-b",
+          "target/slop_model_proof.json",
+          "-w",
+          "target/slop_model_proof.gz",
+          "-k",
+          "target/proof-keccak/vk/vk",
+          "-o",
+          "target/proof-keccak/proof",
+        ],
+        workDir,
+      ),
   );
 
-  const proofPath = join(workDir, "target", "proof-keccak", "proof", "proof");
-  const publicInputsPath = join(workDir, "target", "proof-keccak", "proof", "public_inputs");
-  const proof = await readFile(proofPath);
-  const publicInputs = await readFile(publicInputsPath);
+  const { proof, publicInputs } = await timedProofPhase(timingsMs, "readArtifacts", async () => {
+    const proofPath = join(workDir, "target", "proof-keccak", "proof", "proof");
+    const publicInputsPath = join(workDir, "target", "proof-keccak", "proof", "public_inputs");
+    return {
+      proof: await readFile(proofPath),
+      publicInputs: await readFile(publicInputsPath),
+    };
+  });
+  timingsMs.total = roundMs(performance.now() - totalStarted);
+  console.log(`void proof ${tokenId} timings`, timingsMs);
+
   return {
     chainId: CHAIN_ID,
     tokenId,
@@ -270,8 +325,26 @@ async function runProof(tokenId: number, input: ProofInput, contracts: ProofCont
     proofBytes: proof.length,
     publicInputsBytes: publicInputs.length,
     contracts,
+    timingsMs,
     generatedAt: new Date().toISOString(),
   };
+}
+
+async function timedProofPhase<K extends keyof VoidProofTimings, T>(
+  timings: VoidProofTimings,
+  phase: K,
+  fn: () => Promise<T>,
+): Promise<T> {
+  const started = performance.now();
+  try {
+    return await fn();
+  } finally {
+    timings[phase] = roundMs(performance.now() - started);
+  }
+}
+
+function roundMs(value: number): number {
+  return Math.round(value);
 }
 
 async function ensureCircuitFiles(workDir: string): Promise<void> {

@@ -15,6 +15,7 @@ ENV PATH="/root/.nargo/bin:/root/.bb:${PATH}"
 
 ARG NOIR_VERSION=1.0.0-beta.16
 ARG BB_VERSION=3.0.0-nightly.20251104
+ARG PRECOMPILE_PROVER=false
 
 RUN apt-get update \
   && apt-get install -y --no-install-recommends bash ca-certificates curl git gzip tar \
@@ -29,6 +30,20 @@ RUN apt-get update \
 COPY --from=deps /usr/local/bin/bun /usr/local/bin/bun
 COPY --from=deps /app/node_modules ./node_modules
 COPY . .
+
+RUN if [ "${PRECOMPILE_PROVER}" = "true" ]; then \
+    mkdir -p /opt/slonks-prover/slop_model_proof/src \
+    && cp packages/cli/assets/slop_model_proof/Nargo.toml /opt/slonks-prover/slop_model_proof/Nargo.toml \
+    && cp packages/cli/assets/slop_model_proof/src/main.nr /opt/slonks-prover/slop_model_proof/src/main.nr \
+    && cd /opt/slonks-prover/slop_model_proof \
+    && nargo compile \
+    && bb write_vk \
+      -s ultra_honk \
+      --disable_zk \
+      --oracle_hash keccak \
+      -b target/slop_model_proof.json \
+      -o target/proof-keccak/vk; \
+  fi
 
 # Default to the web process. Fly's [processes] block overrides this per process group.
 EXPOSE 8080
