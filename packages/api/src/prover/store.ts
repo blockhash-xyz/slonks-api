@@ -2,7 +2,8 @@ import { eq } from "drizzle-orm";
 import type { Hex } from "viem";
 import { db } from "../db/client.ts";
 import { voidProofs, type VoidProofRow } from "../db/schema.ts";
-import { resolvedProofCacheKey, type ResolvedVoidProofRequest, type VoidProof } from "./voidProof.ts";
+import { resolvedProofCacheKey } from "./cacheKey.ts";
+import type { ResolvedVoidProofRequest, VoidProof } from "./voidProof.ts";
 
 export async function readStoredVoidProof(request: ResolvedVoidProofRequest): Promise<VoidProof | null> {
   const cacheKey = resolvedProofCacheKey(request);

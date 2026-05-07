@@ -1,4 +1,3 @@
-import { createHash } from "node:crypto";
 import { existsSync } from "node:fs";
 import { mkdir, readFile, rm, writeFile } from "node:fs/promises";
 import { dirname, join, resolve } from "node:path";
@@ -24,6 +23,7 @@ import {
 import { publicClient } from "../chain/client.ts";
 import { CHAIN_ID, CONTRACTS } from "../chain/contracts.ts";
 import { env } from "../env.ts";
+import { resolvedProofCacheKey } from "./cacheKey.ts";
 
 export type VoidProof = {
   chainId: 1;
@@ -139,13 +139,8 @@ export async function generateVoidProofFromResolved(request: ResolvedVoidProofRe
   }
 }
 
-export function resolvedProofCacheKey(request: ResolvedVoidProofRequest): string {
-  const { tokenId, contracts, ...input } = request;
-  return proofCacheKey(tokenId, input, contracts);
-}
-
 async function discoverProofContracts(client: PublicClient): Promise<ProofContracts> {
-  const slonks = CONTRACTS.slonks;
+  const slonks = getAddress(CONTRACTS.slonks);
   const renderer = getAddress(
     await client.readContract({
       address: slonks,
@@ -441,22 +436,6 @@ function bbBin(): string {
   const home = process.env.HOME;
   const homeBb = home ? join(home, ".bb", "bb") : null;
   return homeBb && existsSync(homeBb) ? homeBb : "bb";
-}
-
-function proofCacheKey(tokenId: number, input: ProofInput, contracts: ProofContracts): string {
-  return createHash("sha256")
-    .update(
-      JSON.stringify({
-        version: "slop-model-proof-v1",
-        chainId: CHAIN_ID,
-        tokenId,
-        sourceId: input.sourceId,
-        inputSource: input.inputSource,
-        embedding: input.embedding,
-        contracts,
-      }),
-    )
-    .digest("hex");
 }
 
 function readCache(key: string): VoidProof | null {
