@@ -2,7 +2,7 @@ import { existsSync } from "node:fs";
 import { mkdir, readFile, rm, writeFile } from "node:fs/promises";
 import { dirname, join, resolve } from "node:path";
 import { hexToBytes } from "@blockhash/slonks-core/hex";
-import { renderEmbeddingPixelsLocal } from "@blockhash/slonks-core/imageModel";
+import { renderEmbeddingPixelsLocal, sourceEmbeddingLocal } from "@blockhash/slonks-core/imageModel";
 import {
   buildProverToml,
   bytesToHex,
@@ -11,15 +11,8 @@ import {
   splitBytes32Fields,
   type ProofInputSource,
 } from "@blockhash/slonks-core/proof";
-import { getAddress, zeroAddress, type Address, type Hex, type PublicClient } from "viem";
-import {
-  slonksAbi,
-  slonksActiveStateAbi,
-  slonksImageModelAbi,
-  slonksMergeManagerAbi,
-  slonksRendererAbi,
-  slopGameProofStateAbi,
-} from "../chain/abis.ts";
+import { getAddress, type Address, type Hex, type PublicClient } from "viem";
+import { slonksAbi, slonksActiveStateAbi, slonksMergeManagerAbi } from "../chain/abis.ts";
 import { publicClient } from "../chain/client.ts";
 import { CHAIN_ID, CONTRACTS } from "../chain/contracts.ts";
 import { env } from "../env.ts";
@@ -110,7 +103,7 @@ export async function generateVoidProof(tokenId: number): Promise<VoidProof> {
 
 export async function resolveVoidProofRequest(tokenId: number): Promise<ResolvedVoidProofRequest> {
   const client = publicClient();
-  const contracts = await discoverProofContracts(client);
+  const contracts = configuredProofContracts();
   const input = await resolveProofInput(client, contracts, tokenId);
   return { tokenId, contracts, ...input };
 }
@@ -139,100 +132,55 @@ export async function generateVoidProofFromResolved(request: ResolvedVoidProofRe
   }
 }
 
-async function discoverProofContracts(client: PublicClient): Promise<ProofContracts> {
-  const slonks = getAddress(CONTRACTS.slonks);
-  const renderer = getAddress(
-    await client.readContract({
-      address: slonks,
-      abi: slonksAbi,
-      functionName: "slonksRenderer",
-    }),
-  );
-  const [rendererImageModel, rendererMergeManager, activeState] = await Promise.all([
-    client.readContract({ address: renderer, abi: slonksRendererAbi, functionName: "imageModel" }),
-    client.readContract({ address: renderer, abi: slonksRendererAbi, functionName: "mergeManager" }),
-    readRendererActiveState(client, renderer),
-  ]);
-  const proofState = activeState ? await readSlopGameProofState(client, activeState) : null;
-
+function configuredProofContracts(): ProofContracts {
   return {
-    slonks,
-    renderer,
-    imageModel: proofState?.imageModel ?? getAddress(rendererImageModel),
-    mergeManager: proofState?.mergeManager ?? getAddress(rendererMergeManager),
-    activeState,
+    slonks: getAddress(CONTRACTS.slonks),
+    renderer: getAddress(CONTRACTS.renderer),
+    imageModel: getAddress(CONTRACTS.imageModel),
+    mergeManager: getAddress(CONTRACTS.mergeManager),
+    activeState: getAddress(CONTRACTS.slopGame),
   };
 }
 
-async function readRendererActiveState(client: PublicClient, renderer: Address): Promise<Address | null> {
-  try {
-    const activeState = await client.readContract({
-      address: renderer,
-      abi: slonksRendererAbi,
-      functionName: "activeState",
-    });
-    return activeState === zeroAddress ? null : getAddress(activeState);
-  } catch {
-    return null;
-  }
-}
-
-async function readSlopGameProofState(
-  client: PublicClient,
-  activeState: Address,
-): Promise<{ imageModel: Address; mergeManager: Address } | null> {
-  try {
-    const [imageModel, mergeManager] = await Promise.all([
-      client.readContract({ address: activeState, abi: slopGameProofStateAbi, functionName: "imageModel" }),
-      client.readContract({ address: activeState, abi: slopGameProofStateAbi, functionName: "mergeState" }),
-    ]);
-    if (imageModel === zeroAddress || mergeManager === zeroAddress) return null;
-    return { imageModel: getAddress(imageModel), mergeManager: getAddress(mergeManager) };
-  } catch {
-    return null;
-  }
-}
-
 async function resolveProofInput(client: PublicClient, contracts: ProofContracts, tokenId: number): Promise<ProofInput> {
-  const sourceId = Number(
-    await client.readContract({
-      address: contracts.slonks,
-      abi: slonksAbi,
-      functionName: "sourceIdFor",
-      args: [BigInt(tokenId)],
-    }),
-  );
-
-  if (contracts.activeState) {
-    const hasActiveEmbedding = await client.readContract({
-      address: contracts.activeState,
-      abi: slonksActiveStateAbi,
-      functionName: "hasActiveEmbedding",
-      args: [BigInt(tokenId)],
-    });
-    if (hasActiveEmbedding) {
-      const activeEmbedding = await client.readContract({
-        address: contracts.activeState,
+  const activeState = contracts.activeState ?? getAddress(CONTRACTS.slopGame);
+  const [sourceIdResult, activeEmbeddingResult, mergeEmbeddingResult] = await client.multicall({
+    allowFailure: true,
+    contracts: [
+      {
+        address: contracts.slonks,
+        abi: slonksAbi,
+        functionName: "sourceIdFor",
+        args: [BigInt(tokenId)],
+      },
+      {
+        address: activeState,
         abi: slonksActiveStateAbi,
         functionName: "activeEmbedding",
         args: [BigInt(tokenId)],
-      });
-      if (!isEmptyHexBytes(activeEmbedding)) {
-        return {
-          sourceId,
-          inputSource: "active embedding",
-          embedding: ensureEmbeddingHex(activeEmbedding, "active embedding"),
-        };
-      }
-    }
+      },
+      {
+        address: contracts.mergeManager,
+        abi: slonksMergeManagerAbi,
+        functionName: "mergeEmbedding",
+        args: [BigInt(tokenId)],
+      },
+    ],
+  });
+
+  if (sourceIdResult.status !== "success") throw sourceIdResult.error;
+  const sourceId = Number(sourceIdResult.result);
+
+  const activeEmbedding = activeEmbeddingResult.status === "success" ? activeEmbeddingResult.result : "0x";
+  if (!isEmptyHexBytes(activeEmbedding)) {
+    return {
+      sourceId,
+      inputSource: "active embedding",
+      embedding: ensureEmbeddingHex(activeEmbedding, "active embedding"),
+    };
   }
 
-  const mergeEmbedding = await client.readContract({
-    address: contracts.mergeManager,
-    abi: slonksMergeManagerAbi,
-    functionName: "mergeEmbedding",
-    args: [BigInt(tokenId)],
-  });
+  const mergeEmbedding = mergeEmbeddingResult.status === "success" ? mergeEmbeddingResult.result : "0x";
   if (!isEmptyHexBytes(mergeEmbedding)) {
     return {
       sourceId,
@@ -241,16 +189,10 @@ async function resolveProofInput(client: PublicClient, contracts: ProofContracts
     };
   }
 
-  const sourceEmbedding = await client.readContract({
-    address: contracts.imageModel,
-    abi: slonksImageModelAbi,
-    functionName: "sourceEmbedding",
-    args: [BigInt(sourceId)],
-  });
   return {
     sourceId,
     inputSource: "source embedding",
-    embedding: ensureEmbeddingHex(sourceEmbedding, "source embedding"),
+    embedding: bytesToHex(sourceEmbeddingLocal(sourceId)),
   };
 }
 

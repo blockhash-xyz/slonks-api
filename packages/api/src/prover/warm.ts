@@ -1,29 +1,22 @@
-import { isVoidProof, requestRemoteVoidProof } from "./remote.ts";
-import { resolveVoidProofRequest, type VoidProof } from "./voidProof.ts";
-import { readStoredVoidProof, writeStoredVoidProof } from "./store.ts";
+import { resolveVoidProofRequest } from "./voidProof.ts";
+import { readStoredVoidProof } from "./store.ts";
 import { env } from "../env.ts";
+import { enqueueVoidProofJob } from "./jobs.ts";
 
-export async function warmVoidProof(tokenId: number, reason: string): Promise<VoidProof | null> {
+export async function warmVoidProof(tokenId: number, reason: string): Promise<void> {
   if (!env.SLOP_REMOTE_PROVER_URL) {
     console.info(`void proof warmup skipped for ${tokenId}: remote prover is not configured`);
-    return null;
+    return;
   }
 
   const request = await resolveVoidProofRequest(tokenId);
   const stored = await readStoredVoidProof(request);
   if (stored) {
     console.info(`void proof warmup cache hit for ${tokenId} (${reason})`);
-    return stored;
+    return;
   }
 
   console.info(`void proof warmup started for ${tokenId} (${reason})`);
-  const response = await requestRemoteVoidProof(request);
-  if (response.status !== 200 || !isVoidProof(response.body)) {
-    const message = typeof response.body.error === "string" ? response.body.error : `remote prover returned ${response.status}`;
-    throw new Error(`void proof warmup failed for ${tokenId}: ${message}`);
-  }
-
-  await writeStoredVoidProof(response.body);
-  console.info(`void proof warmup stored for ${tokenId}`);
-  return response.body;
+  await enqueueVoidProofJob(request, { priority: 10 });
+  console.info(`void proof warmup queued for ${tokenId}`);
 }

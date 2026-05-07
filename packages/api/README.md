@@ -584,9 +584,11 @@ The API reads current chain state, automatically chooses the active revival
 embedding, merge embedding, or source embedding, writes the Noir prover inputs,
 runs `nargo execute`, and runs Barretenberg `bb prove`.
 
-When the indexer sees the active SlopGame emit `SlonkLockedForSlop`, it
-pre-generates and stores the matching proof. The public endpoint checks that
-durable cache before waking the remote prover.
+When the indexer sees the active SlopGame emit `SlonkLockedForSlop`, it queues
+the matching proof. A dedicated proof-worker process drains queued jobs and
+stores completed proofs. The public endpoint checks that durable cache first;
+uncached requests return `202` by default instead of holding the HTTP request
+open for a full proof.
 
 Body:
 
@@ -594,7 +596,7 @@ Body:
 { "tokenId": 1819 }
 ```
 
-Returns:
+Returns `200` with a proof when the proof is already cached:
 
 ```ts
 type VoidProof = {
@@ -627,6 +629,29 @@ type VoidProof = {
   generatedAt: string;
 };
 ```
+
+Returns `202` when proof generation is queued or running:
+
+```ts
+type VoidProofPending = {
+  status: "pending" | "running" | "failed";
+  tokenId: number;
+  cacheKey: string;
+  attempts: number;
+  retryAfter: number;
+  statusUrl: string; // /void-proof/jobs/:cacheKey
+  error?: string;
+};
+```
+
+To force the old synchronous behavior for an uncached proof, use
+`POST /void-proof?wait=true`.
+
+### `GET /void-proof/jobs/:cacheKey`
+
+Polls an async proof job returned by `POST /void-proof`. Returns `200` with
+`VoidProof` once ready, `202` with `VoidProofPending` while queued/running, `500`
+for a permanently failed job, or `404` if the job is unknown.
 
 Errors:
 
@@ -705,6 +730,11 @@ files hit 100% line, function, and statement coverage.
 - `SLOP_PROVER_CACHE_TTL_MS`: optional in-process proof cache TTL. Default `600000`.
 - `SLOP_PROVER_MAX_CACHE_ENTRIES`: optional max cached proof entries. Default `50`.
 - `SLOP_PROVER_TIMEOUT_MS`: optional timeout per prover command. Default `120000`.
+- `SLOP_PROOF_WORKER_CONCURRENCY`: optional number of queued proof jobs each proof-worker process handles concurrently. Default `1`.
+- `SLOP_PROOF_JOB_POLL_MS`: optional proof-worker poll interval. Default `1000`.
+- `SLOP_PROOF_JOB_STALE_MS`: optional stale running job reclaim timeout. Default `600000`.
+- `SLOP_PROOF_JOB_MAX_ATTEMPTS`: optional retry cap before a job is marked failed. Default `3`.
+- `SLOP_PROOF_PENDING_RETRY_MS`: optional frontend polling hint for pending proof jobs. Default `3000`.
 - `NARGO_BIN`: optional path override for `nargo`.
 - `BB_BIN`: optional path override for `bb`.
 - `START_BLOCK`: optional indexer start block override.
@@ -723,9 +753,10 @@ bun run deploy:api
 bun run deploy:prover
 ```
 
-The `web` process serves HTTP. The `indexer` process runs the sync loop. Both share
-the same Postgres database. `/void-proof` is delegated to the separate
-`slonks-prover` Fly app when `SLOP_REMOTE_PROVER_URL` is set.
+The `web` process serves HTTP. The `indexer` process runs the sync loop. The
+`proof-worker` process drains queued proof jobs and delegates actual proving to
+the separate `slonks-prover` Fly app when `SLOP_REMOTE_PROVER_URL` is set. All
+API-side processes share the same Postgres database.
 
 The Docker image installs pinned `nargo` and `bb` binaries for proof generation.
 The `slonks-prover` app runs a proof-only HTTP process on a 16 CPU / 32GB

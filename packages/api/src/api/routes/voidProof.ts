@@ -5,6 +5,7 @@ import { ensureEmbeddingHex, type ProofInputSource } from "@blockhash/slonks-cor
 import { getAddress, type Address, type Hex } from "viem";
 import { env } from "../../env.ts";
 import { setNoStore } from "../cache.ts";
+import { resolvedProofCacheKey } from "../../prover/cacheKey.ts";
 import {
   generateVoidProof,
   generateVoidProofFromResolved,
@@ -32,9 +33,36 @@ voidProof.post("/", async (c) => {
   if (typeof resolved === "string") return c.json({ error: resolved }, 400);
   if (resolved) return respondWithProof(c, () => generateVoidProofFromResolved(resolved));
 
-  if (env.SLOP_REMOTE_PROVER_URL) return remoteVoidProof(c, await resolveVoidProofRequest(tokenId));
+  if (env.SLOP_REMOTE_PROVER_URL) {
+    if (!waitForProof(c)) {
+      const { resolveIndexedVoidProofRequest } = await import("../../prover/indexedRequest.ts");
+      const indexed = await resolveIndexedVoidProofRequest(tokenId);
+      if (indexed) return remoteVoidProof(c, indexed);
+    }
+    return remoteVoidProof(c, await resolveVoidProofRequest(tokenId));
+  }
 
   return respondWithProof(c, () => generateVoidProof(tokenId));
+});
+
+voidProof.get("/jobs/:cacheKey", async (c) => {
+  setNoStore(c);
+  const cacheKey = c.req.param("cacheKey");
+  if (!/^[a-f0-9]{64}$/.test(cacheKey)) return c.json({ error: "invalid cacheKey" }, 400);
+
+  const { pendingFromJob, readVoidProofJob } = await import("../../prover/jobs.ts");
+  const job = await readVoidProofJob(cacheKey);
+  if (job && job.status !== "succeeded") {
+    const pending = pendingFromJob(job);
+    c.header("Retry-After", pending.retryAfter.toString());
+    return c.json(pending, pending.status === "failed" ? 500 : 202);
+  }
+
+  const { readStoredVoidProofByCacheKey } = await import("../../prover/store.ts");
+  const stored = await readStoredVoidProofByCacheKey(cacheKey);
+  if (stored) return c.json(stored);
+
+  return c.json({ error: "proof job not found" }, 404);
 });
 
 async function respondWithProof(c: Context, build: () => Promise<unknown>): Promise<Response> {
@@ -54,9 +82,31 @@ async function respondWithProof(c: Context, build: () => Promise<unknown>): Prom
 }
 
 async function remoteVoidProof(c: Context, request: ResolvedVoidProofRequest): Promise<Response> {
+  const shouldWait = waitForProof(c);
+
+  if (!shouldWait) {
+    const { enqueueVoidProofJob, pendingFromJob, readVoidProofJob } = await import("../../prover/jobs.ts");
+    const job = await readVoidProofJob(resolvedProofCacheKey(request));
+    if (job && job.status !== "succeeded") {
+      const pending = pendingFromJob(job);
+      c.header("Retry-After", pending.retryAfter.toString());
+      return c.json(pending, pending.status === "failed" ? 500 : 202);
+    }
+    if (!job) {
+      const queued = await enqueueVoidProofJob(request);
+      const pending = pendingFromJob(queued);
+      c.header("Retry-After", pending.retryAfter.toString());
+      return c.json(pending, 202);
+    }
+  }
+
   const { readStoredVoidProof, writeStoredVoidProof } = await import("../../prover/store.ts");
   const stored = await readStoredVoidProof(request);
   if (stored) return c.json(stored);
+
+  if (!shouldWait) {
+    return c.json({ error: "proof job completed but cached proof was not found" }, 404);
+  }
 
   try {
     const response = await requestRemoteVoidProof(request);
@@ -77,6 +127,12 @@ async function remoteVoidProof(c: Context, request: ResolvedVoidProofRequest): P
     }
     throw err;
   }
+}
+
+function waitForProof(c: Context): boolean {
+  const value = c.req.query("wait") ?? c.req.query("sync");
+  if (!value) return false;
+  return ["1", "true", "yes", "on"].includes(value.trim().toLowerCase());
 }
 
 const PROOF_INPUT_SOURCES = new Set<ProofInputSource>(["active embedding", "merge embedding", "source embedding"]);

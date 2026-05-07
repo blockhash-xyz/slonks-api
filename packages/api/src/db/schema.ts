@@ -153,9 +153,37 @@ export const voidProofs = pgTable(
   }),
 );
 
+export const voidProofJobs = pgTable(
+  "void_proof_jobs",
+  {
+    cacheKey: text("cache_key").primaryKey(),
+    tokenId: integer("token_id").notNull(),
+    sourceId: smallint("source_id").notNull(),
+    inputSource: text("input_source").notNull(),
+    embedding: text("embedding").notNull(),
+    contracts: jsonb("contracts").notNull().$type<Record<string, string | null>>(),
+    status: text("status").notNull().default("queued"),
+    priority: integer("priority").notNull().default(0),
+    attempts: integer("attempts").notNull().default(0),
+    lockedBy: text("locked_by"),
+    lockedAt: timestamp("locked_at", { withTimezone: true }),
+    nextRunAt: timestamp("next_run_at", { withTimezone: true }).notNull().defaultNow(),
+    lastError: text("last_error"),
+    completedAt: timestamp("completed_at", { withTimezone: true }),
+    createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+    updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
+  },
+  (t) => ({
+    statusNextRunIdx: index("void_proof_jobs_status_next_run_idx").on(t.status, t.nextRunAt),
+    tokenIdx: index("void_proof_jobs_token_idx").on(t.tokenId),
+    updatedIdx: index("void_proof_jobs_updated_idx").on(t.updatedAt),
+  }),
+);
+
 export type SourcePunkRow = typeof sourcePunks.$inferSelect;
 export type TokenRow = typeof tokens.$inferSelect;
 export type TransferRow = typeof transfers.$inferSelect;
 export type MergeRow = typeof merges.$inferSelect;
 export type CollectionStateRow = typeof collectionState.$inferSelect;
 export type VoidProofRow = typeof voidProofs.$inferSelect;
+export type VoidProofJobRow = typeof voidProofJobs.$inferSelect;

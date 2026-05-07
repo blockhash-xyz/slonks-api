@@ -16,6 +16,7 @@ primary_region = "iad"
 [processes]
   web = "bun packages/api/src/web.ts"
   indexer = "bun packages/api/src/indexer/index.ts"
+  proof-worker = "bun packages/api/src/proofWorker.ts"
 
 [env]
   PORT = "8080"
@@ -23,6 +24,8 @@ primary_region = "iad"
   SYNC_INTERVAL_MS = "2000"
   SLOP_REMOTE_PROVER_URL = "https://slonks-prover.fly.dev"
   SLOP_REMOTE_PROVER_TIMEOUT_MS = "300000"
+  SLOP_PROOF_WORKER_CONCURRENCY = "1"
+  SLOP_PROOF_JOB_POLL_MS = "1000"
 
 [http_service]
   internal_port = 8080
@@ -47,6 +50,12 @@ primary_region = "iad"
 
 [[vm]]
   processes = ["indexer"]
+  memory = "512mb"
+  cpu_kind = "shared"
+  cpus = 1
+
+[[vm]]
+  processes = ["proof-worker"]
   memory = "512mb"
   cpu_kind = "shared"
   cpus = 1

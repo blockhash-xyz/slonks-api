@@ -19,6 +19,17 @@ const schema = z.object({
   SLOP_PROVER_CACHE_TTL_MS: z.coerce.number().int().nonnegative().default(10 * 60_000),
   SLOP_PROVER_MAX_CACHE_ENTRIES: z.coerce.number().int().positive().default(50),
   SLOP_PROVER_TIMEOUT_MS: z.coerce.number().int().positive().default(120_000),
+  SLOP_PROOF_WORKER_ENABLED: z
+    .preprocess((value) => {
+      if (typeof value !== "string") return value;
+      return ["1", "true", "yes", "on"].includes(value.trim().toLowerCase());
+    }, z.boolean())
+    .default(false),
+  SLOP_PROOF_WORKER_CONCURRENCY: z.coerce.number().int().positive().default(1),
+  SLOP_PROOF_JOB_POLL_MS: z.coerce.number().int().positive().default(1_000),
+  SLOP_PROOF_JOB_STALE_MS: z.coerce.number().int().positive().default(10 * 60_000),
+  SLOP_PROOF_JOB_MAX_ATTEMPTS: z.coerce.number().int().positive().default(3),
+  SLOP_PROOF_PENDING_RETRY_MS: z.coerce.number().int().positive().default(3_000),
   NARGO_BIN: z.string().optional(),
   BB_BIN: z.string().optional(),
   START_BLOCK: z.coerce.bigint().optional(),

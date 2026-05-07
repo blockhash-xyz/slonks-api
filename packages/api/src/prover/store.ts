@@ -6,7 +6,10 @@ import { resolvedProofCacheKey } from "./cacheKey.ts";
 import type { ResolvedVoidProofRequest, VoidProof } from "./voidProof.ts";
 
 export async function readStoredVoidProof(request: ResolvedVoidProofRequest): Promise<VoidProof | null> {
-  const cacheKey = resolvedProofCacheKey(request);
+  return readStoredVoidProofByCacheKey(resolvedProofCacheKey(request));
+}
+
+export async function readStoredVoidProofByCacheKey(cacheKey: string): Promise<VoidProof | null> {
   const [row] = await db.select().from(voidProofs).where(eq(voidProofs.cacheKey, cacheKey)).limit(1);
   return row ? rowToVoidProof(row) : null;
 }
