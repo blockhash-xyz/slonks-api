@@ -40,7 +40,7 @@ primary_region = "iad"
   processes = ["web"]
   memory = "8192mb"
   cpu_kind = "performance"
-  cpus = 2
+  cpus = 4
 
 [[vm]]
   processes = ["indexer"]

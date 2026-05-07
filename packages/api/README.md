@@ -579,7 +579,7 @@ Alias: `POST /proofs/void`.
 
 The API reads current chain state, automatically chooses the active revival
 embedding, merge embedding, or source embedding, writes the Noir prover inputs,
-runs `nargo execute`, and runs Barretenberg `bb prove --verify`.
+runs `nargo execute`, and runs Barretenberg `bb prove`.
 
 Body:
 
@@ -703,5 +703,5 @@ bun run deploy:api
 
 The `web` process serves HTTP. The `indexer` process runs the sync loop. Both share
 the same Postgres database. The Docker image installs pinned `nargo` and `bb`
-binaries for `/void-proof`. Proof generation needs an 8GB performance web VM on
-Fly; smaller shared VMs can be killed by the OS while `nargo` builds the witness.
+binaries for `/void-proof`. Proof generation uses a 4 CPU / 8GB performance web
+VM on Fly; smaller shared VMs can be killed by the OS while `nargo` builds the witness.

@@ -251,7 +251,6 @@ async function runProof(tokenId: number, input: ProofInput, contracts: ProofCont
       "target/proof-keccak/vk/vk",
       "-o",
       "target/proof-keccak/proof",
-      "--verify",
     ],
     workDir,
   );
