@@ -57,6 +57,17 @@ export async function enqueueVoidProofJob(
 
   const job = await readVoidProofJob(cacheKey);
   if (!job) throw new Error("failed to enqueue void proof job");
+  if (job.status !== "succeeded" && job.priority < row.priority) {
+    const [promoted] = await db
+      .update(voidProofJobs)
+      .set({
+        priority: row.priority,
+        updatedAt: new Date(),
+      })
+      .where(and(eq(voidProofJobs.cacheKey, cacheKey), lt(voidProofJobs.priority, row.priority)))
+      .returning();
+    if (promoted) return promoted;
+  }
   return job;
 }
 

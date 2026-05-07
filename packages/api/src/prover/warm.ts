@@ -17,6 +17,6 @@ export async function warmVoidProof(tokenId: number, reason: string): Promise<vo
   }
 
   console.info(`void proof warmup started for ${tokenId} (${reason})`);
-  await enqueueVoidProofJob(request, { priority: 10 });
+  await enqueueVoidProofJob(request, { priority: -10 });
   console.info(`void proof warmup queued for ${tokenId}`);
 }

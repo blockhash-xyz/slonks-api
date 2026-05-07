@@ -18,6 +18,7 @@ import {
 import { isVoidProof, requestRemoteVoidProof, RemoteProverError } from "../../prover/remote.ts";
 
 export const voidProof = new Hono();
+const USER_PROOF_PRIORITY = 100;
 
 voidProof.post("/", async (c) => {
   setNoStore(c);
@@ -88,12 +89,16 @@ async function remoteVoidProof(c: Context, request: ResolvedVoidProofRequest): P
     const { enqueueVoidProofJob, pendingFromJob, readVoidProofJob } = await import("../../prover/jobs.ts");
     const job = await readVoidProofJob(resolvedProofCacheKey(request));
     if (job && job.status !== "succeeded") {
-      const pending = pendingFromJob(job);
+      const activeJob =
+        job.priority < USER_PROOF_PRIORITY
+          ? await enqueueVoidProofJob(request, { priority: USER_PROOF_PRIORITY })
+          : job;
+      const pending = pendingFromJob(activeJob);
       c.header("Retry-After", pending.retryAfter.toString());
       return c.json(pending, pending.status === "failed" ? 500 : 202);
     }
     if (!job) {
-      const queued = await enqueueVoidProofJob(request);
+      const queued = await enqueueVoidProofJob(request, { priority: USER_PROOF_PRIORITY });
       const pending = pendingFromJob(queued);
       c.header("Retry-After", pending.retryAfter.toString());
       return c.json(pending, 202);
