@@ -86,6 +86,7 @@ Current shared-cache TTLs:
 
 - Collection status: 15 seconds.
 - Token snapshots, bulk token snapshots, history, and lineage: 60 seconds.
+- Token PNG images: 1 hour.
 - Token lists, owner endpoints, and holders: 30 seconds.
 - Activity feed: 5 seconds.
 - OpenSea listings: 20 seconds.
@@ -201,6 +202,24 @@ Responses:
 - `200`: `TokenSnapshot`
 - `400`: invalid token id
 - `404`: token not found
+
+### `GET /png/:id`
+
+1200x1200 PNG image for a Slonk. The route uses the token's current rendered
+pixels when available and falls back to its revealed source pixels for unmerged
+or burned tokens. Custom scaling is not supported.
+
+Example:
+
+```bash
+curl -sS https://api.slonks.xyz/png/505 -o slonk-505.png
+```
+
+Responses:
+
+- `200`: `image/png`
+- `400`: invalid token id or unsupported scaling query
+- `404`: token not found or image not available
 
 ### `GET /tokens`
 

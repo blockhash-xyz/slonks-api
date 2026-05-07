@@ -26,12 +26,13 @@ type ResponseCacheOptions = {
 
 const DEFAULT_MAX_ENTRIES = 500;
 const DEFAULT_MAX_BYTES = 16 * 1024 * 1024;
-const DEFAULT_MAX_RESPONSE_BYTES = 64 * 1024;
+const DEFAULT_MAX_RESPONSE_BYTES = 512 * 1024;
 
 export const CACHE = {
   collectionStatus: { sMaxage: 15, staleWhileRevalidate: 60, staleIfError: 300 },
   collectionStats: { sMaxage: 60, staleWhileRevalidate: 300, staleIfError: 600 },
   tokenSnapshot: { sMaxage: 60, staleWhileRevalidate: 300, staleIfError: 600 },
+  tokenImage: { sMaxage: 3600, staleWhileRevalidate: 86_400, staleIfError: 86_400 },
   tokenList: { sMaxage: 30, staleWhileRevalidate: 120, staleIfError: 300 },
   owner: { sMaxage: 30, staleWhileRevalidate: 120, staleIfError: 300 },
   activity: { sMaxage: 5, staleWhileRevalidate: 30, staleIfError: 120 },
@@ -187,6 +188,7 @@ function isMicrocacheCandidate(c: Context): boolean {
   }
 
   if (/^\/tokens\/\d+$/.test(path)) return true;
+  if (/^\/png\/\d+$/.test(path)) return true;
   if (/^\/owners\/[^/]+\/summary$/.test(path)) return true;
 
   if (path === "/tokens") {

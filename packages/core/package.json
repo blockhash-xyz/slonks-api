@@ -19,6 +19,7 @@
     "./hex": "./src/hex.ts",
     "./imageModel": "./src/imageModel.ts",
     "./palette": "./src/palette.ts",
+    "./png": "./src/png.ts",
     "./proof": "./src/proof.ts"
   },
   "repository": {

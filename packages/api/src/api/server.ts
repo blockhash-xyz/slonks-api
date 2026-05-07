@@ -13,6 +13,7 @@ import { mergePreviews } from "./routes/mergePreviews.ts";
 import { listings } from "./routes/listings.ts";
 import { holders } from "./routes/holders.ts";
 import { voidProof } from "./routes/voidProof.ts";
+import { png } from "./routes/png.ts";
 
 export function buildApp() {
   const app = new Hono();
@@ -38,6 +39,7 @@ export function buildApp() {
   app.route("/holders", holders);
   app.route("/void-proof", voidProof);
   app.route("/proofs/void", voidProof);
+  app.route("/png", png);
 
   app.notFound((c) => {
     setNoStore(c);

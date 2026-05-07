@@ -16,7 +16,7 @@ https://api.slonks.xyz
 
 ## Docs
 
-- [API package](packages/api/README.md): endpoint reference, indexed events, void proof generation, data shapes, environment variables, and Fly deploy notes.
+- [API package](packages/api/README.md): endpoint reference, PNG images, indexed events, void proof generation, data shapes, environment variables, and Fly deploy notes.
 - [Core package](packages/core/README.md): shared rendering, blending, diff, palette, and attribute utilities.
 - [CLI package](packages/cli/README.md): install and command reference for `slonks mine`, `slonks global-l1`, and `slonks prove`.
 

@@ -144,6 +144,11 @@ describe("API cache helpers", () => {
       setCache(c, { sMaxage: 10, staleWhileRevalidate: 20 });
       return c.json({ phase: "revealed" });
     });
+    app.get("/png/1", (c) => {
+      setCache(c, { sMaxage: 10, staleWhileRevalidate: 20 });
+      c.header("Content-Type", "image/png");
+      return c.body(new Uint8Array([1, 2, 3]));
+    });
 
     for (const path of ["/listings", "/tokens?ids=1,2", "/tokens?include=pixels", "/owners/0xabc/tokens"]) {
       const res = await app.request(path);
@@ -153,6 +158,8 @@ describe("API cache helpers", () => {
 
     expect((await app.request("/collection/status")).headers.get("X-Slonks-Cache")).toBe("MISS");
     expect((await app.request("/tokens")).headers.get("X-Slonks-Cache")).toBe("MISS");
+    expect((await app.request("/png/1")).headers.get("X-Slonks-Cache")).toBe("MISS");
+    expect((await app.request("/png/1")).headers.get("X-Slonks-Cache")).toBe("HIT");
   });
 
   test("evicts older entries when cache limits are reached", async () => {

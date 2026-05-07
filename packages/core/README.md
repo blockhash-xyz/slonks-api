@@ -21,6 +21,7 @@ Inside this monorepo it is consumed by `@blockhash/slonks-api` and
 - `@blockhash/slonks-core/hex`: convert between `Uint8Array` and `0x` hex.
 - `@blockhash/slonks-core/imageModel`: load bundled model weights, render source/merge embeddings, and compute rendered slop locally.
 - `@blockhash/slonks-core/palette`: CryptoPunks palette constants and decoder.
+- `@blockhash/slonks-core/png`: encode rendered Slonk palette pixels as a 1200x1200 PNG.
 - `@blockhash/slonks-core/proof`: pack model proof inputs and decode Barretenberg proof artifacts.
 
 ## Model Data
@@ -70,6 +71,15 @@ import { diffPixels } from "@blockhash/slonks-core/diff";
 const generatedPixels = new Uint8Array(24 * 24);
 const originalRgba = new Uint8Array(24 * 24 * 4);
 const { count, slopLevel, mask } = diffPixels(generatedPixels, originalRgba);
+```
+
+Encode rendered palette pixels as a PNG:
+
+```ts
+import { encodeSlonkPng } from "@blockhash/slonks-core/png";
+
+const generatedPixels = new Uint8Array(24 * 24);
+const pngBytes = encodeSlonkPng(generatedPixels);
 ```
 
 ## Development
