@@ -124,11 +124,38 @@ export const collectionState = pgTable("collection_state", {
   shuffleOffset: integer("shuffle_offset").notNull().default(0),
   sourcesPrecomputed: integer("sources_precomputed").notNull().default(0),
   lastIndexedBlock: bigint("last_indexed_block", { mode: "bigint" }).notNull().default(sql`0`),
+  proofWarmupLastIndexedBlock: bigint("proof_warmup_last_indexed_block", { mode: "bigint" })
+    .notNull()
+    .default(sql`0`),
   updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
 });
+
+export const voidProofs = pgTable(
+  "void_proofs",
+  {
+    cacheKey: text("cache_key").primaryKey(),
+    tokenId: integer("token_id").notNull(),
+    sourceId: smallint("source_id").notNull(),
+    inputSource: text("input_source").notNull(),
+    embedding: text("embedding").notNull(),
+    proof: text("proof").notNull(),
+    publicInputs: jsonb("public_inputs").notNull().$type<string[]>(),
+    proofBytes: integer("proof_bytes").notNull(),
+    publicInputsBytes: integer("public_inputs_bytes").notNull(),
+    contracts: jsonb("contracts").notNull().$type<Record<string, string | null>>(),
+    timings: jsonb("timings").notNull().$type<Record<string, number>>(),
+    generatedAt: timestamp("generated_at", { withTimezone: true }).notNull(),
+    updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
+  },
+  (t) => ({
+    tokenIdx: index("void_proofs_token_idx").on(t.tokenId),
+    generatedIdx: index("void_proofs_generated_idx").on(t.generatedAt),
+  }),
+);
 
 export type SourcePunkRow = typeof sourcePunks.$inferSelect;
 export type TokenRow = typeof tokens.$inferSelect;
 export type TransferRow = typeof transfers.$inferSelect;
 export type MergeRow = typeof merges.$inferSelect;
 export type CollectionStateRow = typeof collectionState.$inferSelect;
+export type VoidProofRow = typeof voidProofs.$inferSelect;

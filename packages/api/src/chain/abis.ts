@@ -164,6 +164,71 @@ export const slopGameProofStateAbi = [
   },
 ] as const;
 
+export const slopGameAbi = [
+  {
+    type: "event",
+    name: "SlonkLockedForSlop",
+    inputs: [
+      { name: "tokenId", type: "uint256", indexed: true },
+      { name: "owner", type: "address", indexed: true },
+    ],
+    anonymous: false,
+  },
+  {
+    type: "event",
+    name: "SlonkUnlockedFromSlop",
+    inputs: [
+      { name: "tokenId", type: "uint256", indexed: true },
+      { name: "owner", type: "address", indexed: true },
+    ],
+    anonymous: false,
+  },
+  {
+    type: "event",
+    name: "SlonkVoided",
+    inputs: [
+      { name: "tokenId", type: "uint256", indexed: true },
+      { name: "owner", type: "address", indexed: true },
+      { name: "slop", type: "uint256", indexed: false },
+      { name: "mintedAmount", type: "uint256", indexed: false },
+    ],
+    anonymous: false,
+  },
+  {
+    type: "event",
+    name: "SlopClaimed",
+    inputs: [
+      { name: "tokenId", type: "uint256", indexed: true },
+      { name: "recipient", type: "address", indexed: true },
+      { name: "submitter", type: "address", indexed: true },
+      { name: "slop", type: "uint256", indexed: false },
+      { name: "mintedAmount", type: "uint256", indexed: false },
+    ],
+    anonymous: false,
+  },
+  {
+    type: "event",
+    name: "SlonkProtocolVoided",
+    inputs: [
+      { name: "tokenId", type: "uint256", indexed: true },
+      { name: "voider", type: "address", indexed: true },
+    ],
+    anonymous: false,
+  },
+  {
+    type: "event",
+    name: "SlonkBoughtAndVoided",
+    inputs: [
+      { name: "tokenId", type: "uint256", indexed: true },
+      { name: "buyer", type: "address", indexed: true },
+      { name: "target", type: "address", indexed: true },
+      { name: "value", type: "uint256", indexed: false },
+      { name: "spent", type: "uint256", indexed: false },
+    ],
+    anonymous: false,
+  },
+] as const;
+
 export const slonksMergeManagerAbi = [
   {
     type: "function",

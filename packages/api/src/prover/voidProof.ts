@@ -119,7 +119,7 @@ export async function generateVoidProofFromResolved(request: ResolvedVoidProofRe
   if (!env.SLOP_PROVER_ENABLED) throw new ProverUnavailableError("proof generation is disabled");
 
   const { tokenId, contracts, ...input } = request;
-  const key = proofCacheKey(tokenId, input, contracts);
+  const key = resolvedProofCacheKey(request);
   const cached = readCache(key);
   if (cached) return cached;
 
@@ -137,6 +137,11 @@ export async function generateVoidProofFromResolved(request: ResolvedVoidProofRe
   } finally {
     activeProof = null;
   }
+}
+
+export function resolvedProofCacheKey(request: ResolvedVoidProofRequest): string {
+  const { tokenId, contracts, ...input } = request;
+  return proofCacheKey(tokenId, input, contracts);
 }
 
 async function discoverProofContracts(client: PublicClient): Promise<ProofContracts> {

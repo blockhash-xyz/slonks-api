@@ -8,9 +8,11 @@
 // `(baseSourceId + shuffleOffset) % MAX_SUPPLY` — pure math, no per-token RPC.
 
 import { eq, sql } from "drizzle-orm";
-import { decodeEventLog, type Hex, type Log } from "viem";
+import { decodeEventLog, getAddress, zeroAddress, type Address, type Hex, type Log, type PublicClient } from "viem";
 import {
   slonksAbi,
+  slonksRendererAbi,
+  slopGameAbi,
   slonksMergeManagerAbi,
 } from "../chain/abis.ts";
 import { CONTRACTS, MAX_SUPPLY, SLONKS_DEPLOY_BLOCK } from "../chain/contracts.ts";
@@ -26,6 +28,7 @@ import {
   recordTransfer,
   repairMissingBaseSourceIds,
 } from "./handlers.ts";
+import { warmVoidProof } from "../prover/warm.ts";
 
 const ZERO_ADDR = "0x0000000000000000000000000000000000000000";
 
@@ -47,6 +50,7 @@ export async function syncOnce(): Promise<void> {
   let from = stateRow.lastIndexedBlock === 0n ? startFrom : stateRow.lastIndexedBlock + 1n;
   if (from > safeLatest) {
     await refreshCollection(safeLatest);
+    await syncProofWarmupLogs(client, safeLatest);
     return;
   }
 
@@ -81,6 +85,7 @@ export async function syncOnce(): Promise<void> {
   }
 
   await refreshCollection(safeLatest);
+  await syncProofWarmupLogs(client, safeLatest);
 }
 
 async function processSlonksLogs(logs: Log[]): Promise<void> {
@@ -186,6 +191,84 @@ async function processMergeLogs(logs: Log[]): Promise<void> {
       mergeLevel: Number(args.mergeLevel),
       blockTimestamp,
     });
+  }
+}
+
+async function syncProofWarmupLogs(client: PublicClient, safeLatest: bigint): Promise<void> {
+  const [stateRow] = await db
+    .select({ proofWarmupLastIndexedBlock: collectionState.proofWarmupLastIndexedBlock })
+    .from(collectionState)
+    .where(eq(collectionState.id, 1))
+    .limit(1);
+  if (!stateRow) return;
+
+  const gameAddress = await readActiveSlopGameAddress(client);
+  if (!gameAddress) return;
+
+  const startFrom = env.START_BLOCK ?? SLONKS_DEPLOY_BLOCK;
+  let from =
+    stateRow.proofWarmupLastIndexedBlock === 0n ? startFrom : stateRow.proofWarmupLastIndexedBlock + 1n;
+  if (from > safeLatest) return;
+
+  const range = env.LOG_RANGE;
+  while (from <= safeLatest) {
+    const to = from + range - 1n > safeLatest ? safeLatest : from + range - 1n;
+    const gameLogs = await client.getLogs({
+      address: gameAddress,
+      fromBlock: from,
+      toBlock: to,
+    });
+
+    await processSlopGameLogs(gameLogs);
+    await db
+      .update(collectionState)
+      .set({ proofWarmupLastIndexedBlock: to, updatedAt: new Date() })
+      .where(eq(collectionState.id, 1));
+
+    from = to + 1n;
+  }
+}
+
+async function readActiveSlopGameAddress(client: PublicClient): Promise<Address | null> {
+  try {
+    const renderer = getAddress(
+      await client.readContract({
+        address: CONTRACTS.slonks,
+        abi: slonksAbi,
+        functionName: "slonksRenderer",
+      }),
+    );
+    const activeState = await client.readContract({
+      address: renderer,
+      abi: slonksRendererAbi,
+      functionName: "activeState",
+    });
+    return activeState === zeroAddress ? null : getAddress(activeState);
+  } catch (err) {
+    console.warn("failed to read active SlopGame address:", err);
+    return null;
+  }
+}
+
+async function processSlopGameLogs(logs: Log[]): Promise<void> {
+  for (const log of logs) {
+    let decoded;
+    try {
+      decoded = decodeEventLog({
+        abi: slopGameAbi,
+        data: log.data,
+        topics: log.topics,
+        strict: false,
+      });
+    } catch {
+      continue;
+    }
+    if (decoded.eventName !== "SlonkLockedForSlop") continue;
+
+    const args = decoded.args as { tokenId: bigint; owner: `0x${string}` };
+    const tokenId = Number(args.tokenId);
+    if (tokenId < 0 || tokenId >= MAX_SUPPLY) continue;
+    await warmVoidProof(tokenId, `SlonkLockedForSlop ${log.transactionHash ?? ""}`.trim());
   }
 }
 

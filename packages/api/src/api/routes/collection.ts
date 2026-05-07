@@ -19,6 +19,7 @@ async function readState() {
     shuffleOffset: 0,
     sourcesPrecomputed: 0,
     lastIndexedBlock: 0n,
+    proofWarmupLastIndexedBlock: 0n,
     updatedAt: new Date(),
   };
 }

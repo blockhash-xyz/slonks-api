@@ -14,6 +14,7 @@ import {
   type ProofContracts,
   type ResolvedVoidProofRequest,
 } from "../../prover/voidProof.ts";
+import { isVoidProof, requestRemoteVoidProof, RemoteProverError } from "../../prover/remote.ts";
 
 export const voidProof = new Hono();
 
@@ -53,30 +54,29 @@ async function respondWithProof(c: Context, build: () => Promise<unknown>): Prom
 }
 
 async function remoteVoidProof(c: Context, request: ResolvedVoidProofRequest): Promise<Response> {
-  const url = new URL("/void-proof", env.SLOP_REMOTE_PROVER_URL);
-  const headers = new Headers({ "Content-Type": "application/json" });
-  if (env.SLOP_PROVER_AUTH_TOKEN) headers.set("Authorization", `Bearer ${env.SLOP_PROVER_AUTH_TOKEN}`);
+  const { readStoredVoidProof, writeStoredVoidProof } = await import("../../prover/store.ts");
+  const stored = await readStoredVoidProof(request);
+  if (stored) return c.json(stored);
 
-  let response: Response;
   try {
-    response = await fetch(url, {
-      method: "POST",
-      headers,
-      body: JSON.stringify(request),
-      signal: AbortSignal.timeout(env.SLOP_REMOTE_PROVER_TIMEOUT_MS),
-    });
+    const response = await requestRemoteVoidProof(request);
+    const retryAfter = response.retryAfter;
+    if (retryAfter) c.header("Retry-After", retryAfter);
+
+    if (response.status === 200 && isVoidProof(response.body)) {
+      try {
+        await writeStoredVoidProof(response.body);
+      } catch (err) {
+        console.warn("failed to store void proof:", err);
+      }
+    }
+    return c.json(response.body, response.status as ContentfulStatusCode);
   } catch (err) {
-    const timedOut = err instanceof Error && err.name === "TimeoutError";
-    return c.json({ error: timedOut ? "remote prover timed out" : "remote prover unavailable" }, timedOut ? 504 : 503);
+    if (err instanceof RemoteProverError) {
+      return c.json({ error: err.message }, err.status as ContentfulStatusCode);
+    }
+    throw err;
   }
-
-  const text = await response.text();
-  const body = parseJsonObject(text);
-  if (!body) return c.json({ error: "remote prover returned invalid JSON" }, 502);
-
-  const retryAfter = response.headers.get("Retry-After");
-  if (retryAfter) c.header("Retry-After", retryAfter);
-  return c.json(body, response.status as ContentfulStatusCode);
 }
 
 const PROOF_INPUT_SOURCES = new Set<ProofInputSource>(["active embedding", "merge embedding", "source embedding"]);
@@ -150,15 +150,6 @@ function parseAddress(raw: unknown, label: string): AddressParseResult {
     return { ok: true, value: getAddress(raw) };
   } catch {
     return { ok: false, error: `invalid ${label}` };
-  }
-}
-
-function parseJsonObject(text: string): Record<string, unknown> | null {
-  try {
-    const value: unknown = JSON.parse(text);
-    return value && typeof value === "object" ? (value as Record<string, unknown>) : null;
-  } catch {
-    return null;
   }
 }
 

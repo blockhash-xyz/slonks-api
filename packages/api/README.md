@@ -68,7 +68,8 @@ locally from the bundled model weights.
 - Most list endpoints use `page`, `limit`, `hasMore`, and `nextPage`.
 - `/activity` uses cursor pagination with `nextCursor`.
 - Proof generation endpoints are `POST` and use `no-store`; the API keeps a
-  small in-process proof cache keyed by token state.
+  durable Postgres proof cache keyed by token state, plus the prover's short
+  in-process cache for repeated work while a machine is warm.
 - Cacheable `GET` responses include `Cache-Control`, `CDN-Cache-Control`,
   `ETag`, `Vary: Origin`, and `X-Slonks-Cache` headers.
 - Errors are shaped like `{ "error": "message" }`.
@@ -93,8 +94,9 @@ Current shared-cache TTLs:
 
 `X-Slonks-Cache` is `MISS`, `HIT`, or `BYPASS` for the API's in-process cache.
 Health checks and upstream listing errors use `no-store`.
-Void proof responses also use `no-store`; proof bytes are cached only inside the
-web process for a short TTL so repeated UI clicks do not rerun Barretenberg.
+Void proof responses also use `no-store`; proof bytes are stored in Postgres by
+token state so a stopped prover machine does not lose already-generated proofs.
+The prover process also keeps a short in-memory cache while it is warm.
 
 ## Data Shapes
 
@@ -580,6 +582,10 @@ Alias: `POST /proofs/void`.
 The API reads current chain state, automatically chooses the active revival
 embedding, merge embedding, or source embedding, writes the Noir prover inputs,
 runs `nargo execute`, and runs Barretenberg `bb prove`.
+
+When the indexer sees the active SlopGame emit `SlonkLockedForSlop`, it
+pre-generates and stores the matching proof. The public endpoint checks that
+durable cache before waking the remote prover.
 
 Body:
 

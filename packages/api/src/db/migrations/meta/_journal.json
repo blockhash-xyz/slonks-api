@@ -15,6 +15,13 @@
       "when": 1778039643341,
       "tag": "0001_rename_slop_columns",
       "breakpoints": true
+    },
+    {
+      "idx": 2,
+      "version": "7",
+      "when": 1778148478658,
+      "tag": "0002_naive_loki",
+      "breakpoints": true
     }
   ]
 }

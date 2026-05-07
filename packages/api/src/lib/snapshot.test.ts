@@ -11,6 +11,7 @@ const collection = {
   shuffleOffset: 42,
   sourcesPrecomputed: 10_000,
   lastIndexedBlock: 456n,
+  proofWarmupLastIndexedBlock: 0n,
   updatedAt: new Date(),
 };
 
