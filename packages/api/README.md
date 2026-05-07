@@ -668,6 +668,7 @@ Useful scripts:
 - `bun run typecheck`
 - `bun run db:studio`
 - `bun run deploy:api`
+- `bun run deploy:prover`
 
 Coverage is enabled in `bunfig.toml` and fails the test run unless loaded source
 files hit 100% line, function, and statement coverage.
@@ -679,6 +680,9 @@ files hit 100% line, function, and statement coverage.
 - `RPC_URL`: optional fallback RPC URL.
 - `OPENSEA_API_KEY`: optional; enables `/listings`.
 - `OPENSEA_SLUG`: optional; defaults to `slonks`.
+- `SLOP_REMOTE_PROVER_URL`: optional remote prover base URL. When set, `/void-proof` proxies proof generation instead of running it on the web process.
+- `SLOP_REMOTE_PROVER_TIMEOUT_MS`: optional timeout for remote prover requests. Default `300000`.
+- `SLOP_PROVER_AUTH_TOKEN`: optional bearer token shared by the public API and remote prover app.
 - `SLOP_PROVER_ENABLED`: optional; defaults to `true`.
 - `SLOP_PROVER_WORK_DIR`: optional; defaults to `/tmp/slonks-prover/slop_model_proof`.
 - `SLOP_PROVER_CACHE_TTL_MS`: optional in-process proof cache TTL. Default `600000`.
@@ -699,9 +703,15 @@ fly launch --no-deploy
 fly secrets set DATABASE_URL=postgres://... ALCHEMY_API_KEY=...
 fly secrets set OPENSEA_API_KEY=...
 bun run deploy:api
+bun run deploy:prover
 ```
 
 The `web` process serves HTTP. The `indexer` process runs the sync loop. Both share
-the same Postgres database. The Docker image installs pinned `nargo` and `bb`
-binaries for `/void-proof`. Proof generation uses a 4 CPU / 8GB performance web
-VM on Fly; smaller shared VMs can be killed by the OS while `nargo` builds the witness.
+the same Postgres database. `/void-proof` is delegated to the separate
+`slonks-prover` Fly app when `SLOP_REMOTE_PROVER_URL` is set.
+
+The Docker image installs pinned `nargo` and `bb` binaries for proof generation.
+The `slonks-prover` app runs a proof-only HTTP process on a 16 CPU / 32GB
+performance VM with `min_machines_running = 0`, so Fly can stop it when idle and
+autostart it for the next proof request. Smaller shared VMs can be killed by the
+OS while `nargo` builds the witness.

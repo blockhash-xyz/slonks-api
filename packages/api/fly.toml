@@ -1,5 +1,6 @@
 # Fly app config for slonks-api.
 # Two process groups in one app: `web` serves HTTP, `indexer` runs the chain sync.
+# Proof generation is delegated to the separate slonks-prover Fly app.
 # Set DATABASE_URL, ALCHEMY_API_KEY as Fly secrets.
 #   fly secrets set DATABASE_URL=... ALCHEMY_API_KEY=...
 
@@ -20,6 +21,8 @@ primary_region = "iad"
   PORT = "8080"
   LOG_RANGE = "100"
   SYNC_INTERVAL_MS = "2000"
+  SLOP_REMOTE_PROVER_URL = "https://slonks-prover.fly.dev"
+  SLOP_REMOTE_PROVER_TIMEOUT_MS = "300000"
 
 [http_service]
   internal_port = 8080
@@ -40,7 +43,7 @@ primary_region = "iad"
   processes = ["web"]
   memory = "8192mb"
   cpu_kind = "performance"
-  cpus = 4
+  cpus = 2
 
 [[vm]]
   processes = ["indexer"]

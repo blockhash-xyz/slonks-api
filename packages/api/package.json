@@ -6,8 +6,10 @@
   "type": "module",
   "scripts": {
     "dev:web": "bun --watch src/web.ts",
+    "dev:prover": "bun --watch src/proverWeb.ts",
     "dev:indexer": "bun --watch src/indexer/index.ts",
     "start:web": "bun src/web.ts",
+    "start:prover": "bun src/proverWeb.ts",
     "start:indexer": "bun src/indexer/index.ts",
     "test": "cd ../.. && bun test packages/core packages/api",
     "db:generate": "cd ../.. && drizzle-kit generate --config packages/api/drizzle.config.ts",

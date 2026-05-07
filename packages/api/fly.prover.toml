@@ -1,0 +1,37 @@
+# Fly app config for slonks-prover.
+# A proof-only app that can autostop when idle and autostart for proof requests.
+
+app = "slonks-prover"
+primary_region = "iad"
+
+[build]
+  dockerfile = "Dockerfile"
+
+[processes]
+  app = "bun packages/api/src/proverWeb.ts"
+
+[env]
+  PORT = "8080"
+  SLOP_PROVER_ENABLED = "true"
+  SLOP_PROVER_TIMEOUT_MS = "300000"
+
+[http_service]
+  internal_port = 8080
+  force_https = true
+  auto_stop_machines = "stop"
+  auto_start_machines = true
+  min_machines_running = 0
+  processes = ["app"]
+
+[[http_service.checks]]
+  grace_period = "10s"
+  interval = "30s"
+  method = "GET"
+  timeout = "5s"
+  path = "/health"
+
+[[vm]]
+  processes = ["app"]
+  memory = "32768mb"
+  cpu_kind = "performance"
+  cpus = 16

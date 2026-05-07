@@ -1,11 +1,14 @@
 import { z } from "zod";
 
 const schema = z.object({
-  DATABASE_URL: z.string().url(),
+  DATABASE_URL: z.string().url().optional(),
   ALCHEMY_API_KEY: z.string().optional(),
   RPC_URL: z.string().url().optional(),
   OPENSEA_API_KEY: z.string().optional(),
   OPENSEA_SLUG: z.string().default("slonks"),
+  SLOP_REMOTE_PROVER_URL: z.string().url().optional(),
+  SLOP_REMOTE_PROVER_TIMEOUT_MS: z.coerce.number().int().positive().default(300_000),
+  SLOP_PROVER_AUTH_TOKEN: z.string().optional(),
   SLOP_PROVER_ENABLED: z
     .preprocess((value) => {
       if (typeof value !== "string") return value;
@@ -42,4 +45,9 @@ export function rpcUrl(): string {
   if (env.ALCHEMY_API_KEY) return `https://eth-mainnet.g.alchemy.com/v2/${env.ALCHEMY_API_KEY}`;
   if (env.RPC_URL) return env.RPC_URL;
   return "https://eth.llamarpc.com";
+}
+
+export function databaseUrl(): string {
+  if (!env.DATABASE_URL) throw new Error("DATABASE_URL is required");
+  return env.DATABASE_URL;
 }

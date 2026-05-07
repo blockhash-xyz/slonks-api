@@ -66,6 +66,12 @@ Deploy the API:
 bun run deploy:api
 ```
 
+Deploy the proof-only Fly app:
+
+```bash
+bun run deploy:prover
+```
+
 ## Repository
 
 The npm org is `@blockhash`; the GitHub org is `@blockhash-xyz`.
