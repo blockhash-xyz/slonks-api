@@ -21,7 +21,7 @@ export type VoidProofPending = {
 
 export async function enqueueVoidProofJob(
   request: ResolvedVoidProofRequest,
-  options: { priority?: number } = {},
+  options: { priority?: number; bumpExisting?: boolean } = {},
 ): Promise<VoidProofJobRow> {
   const cacheKey = resolvedProofCacheKey(request);
   const row = {
@@ -57,18 +57,33 @@ export async function enqueueVoidProofJob(
 
   const job = await readVoidProofJob(cacheKey);
   if (!job) throw new Error("failed to enqueue void proof job");
-  if (job.status !== "succeeded" && job.priority < row.priority) {
+  const promotedPriority = nextPriority(job, row.priority, options.bumpExisting ?? false);
+  if (job.status !== "succeeded" && promotedPriority != null) {
     const [promoted] = await db
       .update(voidProofJobs)
       .set({
-        priority: row.priority,
+        priority: promotedPriority,
+        nextRunAt: row.nextRunAt,
         updatedAt: new Date(),
       })
-      .where(and(eq(voidProofJobs.cacheKey, cacheKey), lt(voidProofJobs.priority, row.priority)))
+      .where(
+        and(
+          eq(voidProofJobs.cacheKey, cacheKey),
+          eq(voidProofJobs.status, "queued"),
+          lt(voidProofJobs.priority, promotedPriority),
+        ),
+      )
       .returning();
     if (promoted) return promoted;
   }
   return job;
+}
+
+function nextPriority(job: VoidProofJobRow, requestedPriority: number, bumpExisting: boolean): number | null {
+  if (job.status !== "queued") return job.priority < requestedPriority ? requestedPriority : null;
+  if (job.priority < requestedPriority) return requestedPriority;
+  if (!bumpExisting || requestedPriority <= 0) return null;
+  return Math.min(job.priority + 1, requestedPriority + 900);
 }
 
 export async function readVoidProofJob(cacheKey: string): Promise<VoidProofJobRow | null> {

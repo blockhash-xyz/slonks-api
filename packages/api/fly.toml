@@ -24,7 +24,7 @@ primary_region = "iad"
   SYNC_INTERVAL_MS = "2000"
   SLOP_REMOTE_PROVER_URL = "https://slonks-prover.fly.dev"
   SLOP_REMOTE_PROVER_TIMEOUT_MS = "300000"
-  SLOP_PROOF_WORKER_CONCURRENCY = "1"
+  SLOP_PROOF_WORKER_CONCURRENCY = "4"
   SLOP_PROOF_JOB_POLL_MS = "1000"
 
 [http_service]

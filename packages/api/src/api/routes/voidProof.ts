@@ -89,10 +89,10 @@ async function remoteVoidProof(c: Context, request: ResolvedVoidProofRequest): P
     const { enqueueVoidProofJob, pendingFromJob, readVoidProofJob } = await import("../../prover/jobs.ts");
     const job = await readVoidProofJob(resolvedProofCacheKey(request));
     if (job && job.status !== "succeeded") {
-      const activeJob =
-        job.priority < USER_PROOF_PRIORITY
-          ? await enqueueVoidProofJob(request, { priority: USER_PROOF_PRIORITY })
-          : job;
+      const activeJob = await enqueueVoidProofJob(request, {
+        priority: USER_PROOF_PRIORITY,
+        bumpExisting: true,
+      });
       const pending = pendingFromJob(activeJob);
       c.header("Retry-After", pending.retryAfter.toString());
       return c.json(pending, pending.status === "failed" ? 500 : 202);
