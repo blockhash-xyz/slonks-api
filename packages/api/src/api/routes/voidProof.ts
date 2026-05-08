@@ -40,11 +40,6 @@ voidProof.post("/", async (c) => {
   }
 
   if (env.SLOP_REMOTE_PROVER_URL) {
-    if (!waitForProof(c)) {
-      const { resolveIndexedVoidProofRequest } = await import("../../prover/indexedRequest.ts");
-      const indexed = await resolveIndexedVoidProofRequest(tokenId);
-      if (indexed) return remoteVoidProof(c, indexed);
-    }
     return remoteVoidProof(c, await resolveVoidProofRequest(tokenId));
   }
 
