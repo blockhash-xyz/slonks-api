@@ -28,7 +28,6 @@ import {
   recordTransfer,
   repairMissingBaseSourceIds,
 } from "./handlers.ts";
-import { warmVoidProof } from "../prover/warm.ts";
 
 const ZERO_ADDR = "0x0000000000000000000000000000000000000000";
 
@@ -50,7 +49,7 @@ export async function syncOnce(): Promise<void> {
   let from = stateRow.lastIndexedBlock === 0n ? startFrom : stateRow.lastIndexedBlock + 1n;
   if (from > safeLatest) {
     await refreshCollection(safeLatest);
-    await syncProofWarmupLogs(client, safeLatest);
+    await syncSlopGameLogs(client, safeLatest);
     return;
   }
 
@@ -85,7 +84,7 @@ export async function syncOnce(): Promise<void> {
   }
 
   await refreshCollection(safeLatest);
-  await syncProofWarmupLogs(client, safeLatest);
+  await syncSlopGameLogs(client, safeLatest);
 }
 
 async function processSlonksLogs(logs: Log[]): Promise<void> {
@@ -194,10 +193,9 @@ async function processMergeLogs(logs: Log[]): Promise<void> {
   }
 }
 
-async function syncProofWarmupLogs(client: PublicClient, safeLatest: bigint): Promise<void> {
+async function syncSlopGameLogs(client: PublicClient, safeLatest: bigint): Promise<void> {
   const [stateRow] = await db
     .select({
-      proofWarmupLastIndexedBlock: collectionState.proofWarmupLastIndexedBlock,
       gameClaimsLastIndexedBlock: collectionState.gameClaimsLastIndexedBlock,
     })
     .from(collectionState)
@@ -209,15 +207,8 @@ async function syncProofWarmupLogs(client: PublicClient, safeLatest: bigint): Pr
   if (!gameAddress) return;
 
   const startFrom = env.START_BLOCK ?? SLONKS_DEPLOY_BLOCK;
-  let proofCursor = stateRow.proofWarmupLastIndexedBlock;
   let gameClaimsCursor = stateRow.gameClaimsLastIndexedBlock;
-  const earliestCursor =
-    proofCursor === 0n || gameClaimsCursor === 0n
-      ? 0n
-      : proofCursor < gameClaimsCursor
-        ? proofCursor
-        : gameClaimsCursor;
-  let from = earliestCursor === 0n ? startFrom : earliestCursor + 1n;
+  let from = gameClaimsCursor === 0n ? startFrom : gameClaimsCursor + 1n;
   if (from > safeLatest) return;
 
   const range = env.LOG_RANGE;
@@ -229,18 +220,13 @@ async function syncProofWarmupLogs(client: PublicClient, safeLatest: bigint): Pr
       toBlock: to,
     });
 
-    await processSlopGameLogs(gameLogs, {
-      claimAfterBlock: gameClaimsCursor,
-      warmProofAfterBlock: proofCursor,
-    });
+    await processSlopGameLogs(gameLogs, { claimAfterBlock: gameClaimsCursor });
 
     if (gameClaimsCursor < to) gameClaimsCursor = to;
-    if (proofCursor < to) proofCursor = to;
 
     await db
       .update(collectionState)
       .set({
-        proofWarmupLastIndexedBlock: proofCursor,
         gameClaimsLastIndexedBlock: gameClaimsCursor,
         updatedAt: new Date(),
       })
@@ -273,7 +259,7 @@ async function readActiveSlopGameAddress(client: PublicClient): Promise<Address 
 
 async function processSlopGameLogs(
   logs: Log[],
-  options: { claimAfterBlock?: bigint; warmProofAfterBlock?: bigint } = {},
+  options: { claimAfterBlock?: bigint } = {},
 ): Promise<void> {
   for (const log of logs) {
     let decoded;
@@ -304,11 +290,7 @@ async function processSlopGameLogs(
     const tokenId = Number(args.tokenId);
     if (tokenId < 0 || tokenId >= MAX_SUPPLY) continue;
 
-    const shouldWarmProof =
-      decoded.eventName === "SlonkLockedForSlop" && shouldProcessGameEvent(log.blockNumber, options.warmProofAfterBlock);
-
     if (!shouldProcessGameEvent(log.blockNumber, options.claimAfterBlock)) {
-      if (shouldWarmProof) await warmVoidProof(tokenId, `SlonkLockedForSlop ${log.transactionHash}`.trim());
       continue;
     }
 
@@ -362,7 +344,6 @@ async function processSlopGameLogs(
               updatedAt: new Date(),
             },
           });
-        if (shouldWarmProof) await warmVoidProof(tokenId, `SlonkLockedForSlop ${log.transactionHash}`.trim());
         break;
       }
       case "SlonkUnlockedFromSlop": {
