@@ -32,6 +32,9 @@ import {
 } from "./handlers.ts";
 
 const ZERO_ADDR = "0x0000000000000000000000000000000000000000";
+const KNOWN_SLOP_GAME_ADDRESSES = new Set(
+  [CONTRACTS.slopGame, ...CONTRACTS.legacySlopGames].map((address) => address.toLowerCase()),
+);
 
 export async function syncOnce(): Promise<void> {
   const client = publicClient();
@@ -112,20 +115,32 @@ async function processSlonksLogs(logs: Log[]): Promise<boolean> {
         const tokenId = Number(args.tokenId);
         if (tokenId < 0 || tokenId >= MAX_SUPPLY) continue;
         const blockTimestamp = await blockTime(log.blockNumber);
+        const from = args.from.toLowerCase();
+        const to = args.to.toLowerCase();
 
         await recordTransfer({
           blockNumber: log.blockNumber,
           logIndex: log.logIndex,
           txHash: log.transactionHash,
           tokenId,
-          from: args.from.toLowerCase(),
-          to: args.to.toLowerCase(),
+          from,
+          to,
           blockTimestamp,
         });
 
-        const isMint = args.from.toLowerCase() === ZERO_ADDR;
-        const isBurn = args.to.toLowerCase() === ZERO_ADDR;
-        await ensureToken(tokenId, log.blockNumber, isMint, isBurn, args.to.toLowerCase());
+        const isMint = from === ZERO_ADDR;
+        const isBurn = to === ZERO_ADDR;
+        await ensureToken(tokenId, log.blockNumber, isMint, isBurn, to);
+        if (!isMint && !isBurn && isKnownSlopGameAddress(from) && !isKnownSlopGameAddress(to)) {
+          await markClaimUnlocked({
+            tokenId,
+            recipient: to,
+            blockNumber: log.blockNumber,
+            logIndex: log.logIndex,
+            txHash: log.transactionHash,
+            blockTimestamp,
+          });
+        }
         changed = true;
         break;
       }
@@ -389,30 +404,14 @@ async function processSlopGameLogs(
       case "SlonkUnlockedFromSlop": {
         if (!args.owner) break;
         const blockTimestamp = await blockTime(log.blockNumber);
-        await db
-          .insert(slopClaims)
-          .values({
-            tokenId,
-            status: "unlocked",
-            recipient: args.owner.toLowerCase(),
-            unlockedAtBlock: log.blockNumber,
-            unlockedAtLogIndex: log.logIndex,
-            unlockedAtTxHash: log.transactionHash,
-            unlockedAtTimestamp: blockTimestamp,
-            updatedAt: new Date(),
-          })
-          .onConflictDoUpdate({
-            target: slopClaims.tokenId,
-            set: {
-              status: "unlocked",
-              recipient: args.owner.toLowerCase(),
-              unlockedAtBlock: log.blockNumber,
-              unlockedAtLogIndex: log.logIndex,
-              unlockedAtTxHash: log.transactionHash,
-              unlockedAtTimestamp: blockTimestamp,
-              updatedAt: new Date(),
-            },
-          });
+        await markClaimUnlocked({
+          tokenId,
+          recipient: args.owner.toLowerCase(),
+          blockNumber: log.blockNumber,
+          logIndex: log.logIndex,
+          txHash: log.transactionHash,
+          blockTimestamp,
+        });
         changed = true;
         break;
       }
@@ -455,7 +454,6 @@ async function processSlopGameLogs(
         changed = true;
         break;
       }
-      case "SlonkProtocolVoided":
       case "SlonkBoughtAndVoided": {
         const blockTimestamp = await blockTime(log.blockNumber);
         await db
@@ -464,7 +462,9 @@ async function processSlopGameLogs(
             tokenId,
             status: "voided",
             recipient: args.target?.toLowerCase() ?? null,
-            submitter: args.voider?.toLowerCase() ?? args.buyer?.toLowerCase() ?? null,
+            submitter: args.buyer?.toLowerCase() ?? null,
+            slop: null,
+            mintedAmount: null,
             claimedAtBlock: log.blockNumber,
             claimedAtLogIndex: log.logIndex,
             claimedAtTxHash: log.transactionHash,
@@ -476,7 +476,52 @@ async function processSlopGameLogs(
             set: {
               status: "voided",
               recipient: args.target?.toLowerCase() ?? null,
-              submitter: args.voider?.toLowerCase() ?? args.buyer?.toLowerCase() ?? null,
+              submitter: args.buyer?.toLowerCase() ?? null,
+              slop: null,
+              mintedAmount: null,
+              unlockedAtBlock: null,
+              unlockedAtLogIndex: null,
+              unlockedAtTxHash: null,
+              unlockedAtTimestamp: null,
+              claimedAtBlock: log.blockNumber,
+              claimedAtLogIndex: log.logIndex,
+              claimedAtTxHash: log.transactionHash,
+              claimedAtTimestamp: blockTimestamp,
+              updatedAt: new Date(),
+            },
+          });
+        changed = true;
+        break;
+      }
+      case "SlonkProtocolVoided": {
+        const blockTimestamp = await blockTime(log.blockNumber);
+        await db
+          .insert(slopClaims)
+          .values({
+            tokenId,
+            status: "voided",
+            recipient: null,
+            submitter: args.voider?.toLowerCase() ?? null,
+            slop: null,
+            mintedAmount: null,
+            claimedAtBlock: log.blockNumber,
+            claimedAtLogIndex: log.logIndex,
+            claimedAtTxHash: log.transactionHash,
+            claimedAtTimestamp: blockTimestamp,
+            updatedAt: new Date(),
+          })
+          .onConflictDoUpdate({
+            target: slopClaims.tokenId,
+            set: {
+              status: "voided",
+              recipient: sql`coalesce(${slopClaims.recipient}, excluded.recipient)`,
+              submitter: args.voider?.toLowerCase() ?? null,
+              slop: null,
+              mintedAmount: null,
+              unlockedAtBlock: null,
+              unlockedAtLogIndex: null,
+              unlockedAtTxHash: null,
+              unlockedAtTimestamp: null,
               claimedAtBlock: log.blockNumber,
               claimedAtLogIndex: log.logIndex,
               claimedAtTxHash: log.transactionHash,
@@ -492,8 +537,60 @@ async function processSlopGameLogs(
   return changed;
 }
 
+function isKnownSlopGameAddress(address: string): boolean {
+  return KNOWN_SLOP_GAME_ADDRESSES.has(address.toLowerCase());
+}
+
 function shouldProcessGameEvent(blockNumber: bigint, afterBlock: bigint | undefined): boolean {
   return afterBlock == null || blockNumber > afterBlock;
+}
+
+async function markClaimUnlocked(args: {
+  tokenId: number;
+  recipient: string;
+  blockNumber: bigint;
+  logIndex: number;
+  txHash: string;
+  blockTimestamp: Date;
+}): Promise<void> {
+  await db
+    .insert(slopClaims)
+    .values({
+      tokenId: args.tokenId,
+      status: "unlocked",
+      recipient: args.recipient,
+      submitter: null,
+      slop: null,
+      mintedAmount: null,
+      unlockedAtBlock: args.blockNumber,
+      unlockedAtLogIndex: args.logIndex,
+      unlockedAtTxHash: args.txHash,
+      unlockedAtTimestamp: args.blockTimestamp,
+      claimedAtBlock: null,
+      claimedAtLogIndex: null,
+      claimedAtTxHash: null,
+      claimedAtTimestamp: null,
+      updatedAt: new Date(),
+    })
+    .onConflictDoUpdate({
+      target: slopClaims.tokenId,
+      set: {
+        status: "unlocked",
+        recipient: args.recipient,
+        submitter: null,
+        slop: null,
+        mintedAmount: null,
+        unlockedAtBlock: args.blockNumber,
+        unlockedAtLogIndex: args.logIndex,
+        unlockedAtTxHash: args.txHash,
+        unlockedAtTimestamp: args.blockTimestamp,
+        claimedAtBlock: null,
+        claimedAtLogIndex: null,
+        claimedAtTxHash: null,
+        claimedAtTimestamp: null,
+        updatedAt: new Date(),
+      },
+    });
 }
 
 async function markClaimed(args: {
