@@ -1,12 +1,14 @@
 import { Hono } from "hono";
 import { and, asc, desc, eq, sql, type SQL } from "drizzle-orm";
 import { getAddress, isAddress } from "viem";
+import { CONTRACTS } from "../../chain/contracts.ts";
 import { db } from "../../db/client.ts";
 import { slopClaims, sourcePunks, tokens } from "../../db/schema.ts";
 import { CACHE, setCache } from "../cache.ts";
 import { includeParam, tokenListDto } from "../dto.ts";
 
 export const voidRoutes = new Hono();
+const ACTIVE_GAME_OWNER = CONTRACTS.slopGame.toLowerCase();
 
 // Slonks locked in the active SLOP game with an unclaimed SLOP claim.
 voidRoutes.get("/pending-claims", async (c) => {
@@ -18,7 +20,11 @@ voidRoutes.get("/pending-claims", async (c) => {
 
   const includePixels = includeParam(sp.include, "pixels");
   const owner = sp.owner ?? sp.recipient;
-  const conditions: SQL[] = [eq(slopClaims.status, "pending")];
+  const conditions: SQL[] = [
+    eq(slopClaims.status, "pending"),
+    eq(tokens.exists, true),
+    eq(tokens.owner, ACTIVE_GAME_OWNER),
+  ];
   if (owner) {
     if (!isAddress(owner)) return c.json({ error: "invalid owner" }, 400);
     conditions.push(eq(slopClaims.recipient, owner.toLowerCase()));
@@ -52,7 +58,11 @@ voidRoutes.get("/pending-claims", async (c) => {
   const where = and(...conditions);
   const offset = (page - 1) * limit;
   const [countRow, rows] = await Promise.all([
-    db.select({ count: sql<number>`count(*)::int` }).from(slopClaims).where(where),
+    db
+      .select({ count: sql<number>`count(*)::int` })
+      .from(slopClaims)
+      .innerJoin(tokens, eq(tokens.tokenId, slopClaims.tokenId))
+      .where(where),
     db
       .select(selectFields)
       .from(slopClaims)
