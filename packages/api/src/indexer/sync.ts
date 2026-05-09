@@ -212,8 +212,8 @@ async function syncSlopGameLogs(client: PublicClient, safeLatest: bigint): Promi
     .limit(1);
   if (!stateRow) return;
 
-  const gameAddress = await readActiveSlopGameAddress(client);
-  if (!gameAddress) return;
+  const gameAddresses = await readSlopGameAddresses(client);
+  if (gameAddresses.length === 0) return;
 
   const startFrom = env.START_BLOCK ?? SLONKS_DEPLOY_BLOCK;
   let gameClaimsCursor = stateRow.gameClaimsLastIndexedBlock;
@@ -224,12 +224,12 @@ async function syncSlopGameLogs(client: PublicClient, safeLatest: bigint): Promi
   while (from <= safeLatest) {
     const to = from + range - 1n > safeLatest ? safeLatest : from + range - 1n;
     const gameLogs = await client.getLogs({
-      address: gameAddress,
+      address: gameAddresses,
       fromBlock: from,
       toBlock: to,
     });
 
-    if (await processSlopGameLogs(gameLogs, { claimAfterBlock: gameClaimsCursor })) {
+    if (await processSlopGameLogs(sortLogs(gameLogs), { claimAfterBlock: gameClaimsCursor })) {
       await bumpApiCacheVersion();
     }
 
@@ -245,6 +245,19 @@ async function syncSlopGameLogs(client: PublicClient, safeLatest: bigint): Promi
 
     from = to + 1n;
   }
+}
+
+async function readSlopGameAddresses(client: PublicClient): Promise<Address[]> {
+  const addresses = new Map<string, Address>();
+  const active = await readActiveSlopGameAddress(client);
+
+  for (const address of [active, ...CONTRACTS.legacySlopGames]) {
+    if (!address || address === zeroAddress) continue;
+    const checksumAddress = getAddress(address);
+    addresses.set(checksumAddress.toLowerCase(), checksumAddress);
+  }
+
+  return [...addresses.values()];
 }
 
 async function readActiveSlopGameAddress(client: PublicClient): Promise<Address | null> {
@@ -266,6 +279,20 @@ async function readActiveSlopGameAddress(client: PublicClient): Promise<Address 
     console.warn("failed to read active SlopGame address:", err);
     return null;
   }
+}
+
+function sortLogs(logs: Log[]): Log[] {
+  return [...logs].sort((a, b) => {
+    if (a.blockNumber !== b.blockNumber) {
+      if (a.blockNumber == null) return 1;
+      if (b.blockNumber == null) return -1;
+      return a.blockNumber < b.blockNumber ? -1 : 1;
+    }
+    if (a.logIndex == null && b.logIndex == null) return 0;
+    if (a.logIndex == null) return 1;
+    if (b.logIndex == null) return -1;
+    return a.logIndex - b.logIndex;
+  });
 }
 
 async function processSlopGameLogs(
