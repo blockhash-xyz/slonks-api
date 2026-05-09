@@ -266,7 +266,7 @@ async function readSlopGameAddresses(client: PublicClient): Promise<Address[]> {
   const addresses = new Map<string, Address>();
   const active = await readActiveSlopGameAddress(client);
 
-  for (const address of [active, ...CONTRACTS.legacySlopGames]) {
+  for (const address of [CONTRACTS.slopGame, active, ...CONTRACTS.legacySlopGames]) {
     if (!address || address === zeroAddress) continue;
     const checksumAddress = getAddress(address);
     addresses.set(checksumAddress.toLowerCase(), checksumAddress);
