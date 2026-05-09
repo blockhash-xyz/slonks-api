@@ -4,6 +4,7 @@ import { db } from "../../db/client.ts";
 import { collectionState, tokens } from "../../db/schema.ts";
 import { buildCollectionStatus } from "../../lib/snapshot.ts";
 import { CACHE, setCache } from "../cache.ts";
+import { readThroughStateCache } from "../stateCache.ts";
 
 export const collection = new Hono();
 
@@ -34,35 +35,37 @@ collection.get("/status", async (c) => {
 // Per-attribute, per-type, per-slop-level, per-merge-level histograms — used by the
 // merge lab and rarity rankings.
 collection.get("/distributions", async (c) => {
-  const [byMergeLevel, bySlopLevel, byType] = await Promise.all([
-    db
-      .select({
-        mergeLevel: tokens.mergeLevel,
-        count: sql<number>`count(*)::int`,
-      })
-      .from(tokens)
-      .where(eq(tokens.exists, true))
-      .groupBy(tokens.mergeLevel)
-      .orderBy(tokens.mergeLevel),
-    db
-      .select({
-        slopLevel: tokens.slopLevel,
-        count: sql<number>`count(*)::int`,
-      })
-      .from(tokens)
-      .where(eq(tokens.exists, true))
-      .groupBy(tokens.slopLevel)
-      .orderBy(tokens.slopLevel),
-    db.execute(sql`
-      select sp.punk_type as type, count(*)::int as count
-      from tokens t
-      join source_punks sp on sp.source_id = t.source_id
-      where t.exists = true and t.source_id is not null
-      group by sp.punk_type
-      order by count desc
-    `),
-  ]);
+  const result = await readThroughStateCache(c, "collection:distributions", async () => {
+    const [byMergeLevel, bySlopLevel, byType] = await Promise.all([
+      db
+        .select({
+          mergeLevel: tokens.mergeLevel,
+          count: sql<number>`count(*)::int`,
+        })
+        .from(tokens)
+        .where(eq(tokens.exists, true))
+        .groupBy(tokens.mergeLevel)
+        .orderBy(tokens.mergeLevel),
+      db
+        .select({
+          slopLevel: tokens.slopLevel,
+          count: sql<number>`count(*)::int`,
+        })
+        .from(tokens)
+        .where(eq(tokens.exists, true))
+        .groupBy(tokens.slopLevel)
+        .orderBy(tokens.slopLevel),
+      db.execute(sql`
+        select sp.punk_type as type, count(*)::int as count
+        from tokens t
+        join source_punks sp on sp.source_id = t.source_id
+        where t.exists = true and t.source_id is not null
+        group by sp.punk_type
+        order by count desc
+      `),
+    ]);
 
-  setCache(c, CACHE.collectionStats);
-  return c.json({ byMergeLevel, bySlopLevel, byType });
+    return { byMergeLevel, bySlopLevel, byType };
+  });
+  return c.json(result);
 });

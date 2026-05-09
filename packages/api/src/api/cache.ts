@@ -30,9 +30,6 @@ const DEFAULT_MAX_RESPONSE_BYTES = 512 * 1024;
 
 export const CACHE = {
   collectionStatus: { sMaxage: 15, staleWhileRevalidate: 60, staleIfError: 300 },
-  collectionStats: { sMaxage: 60, staleWhileRevalidate: 300, staleIfError: 600 },
-  tokenList: { sMaxage: 30, staleWhileRevalidate: 120, staleIfError: 300 },
-  owner: { sMaxage: 30, staleWhileRevalidate: 120, staleIfError: 300 },
   activity: { sMaxage: 5, staleWhileRevalidate: 30, staleIfError: 120 },
   listings: { sMaxage: 20, staleWhileRevalidate: 60, staleIfError: 120 },
   preview: { sMaxage: 30, staleWhileRevalidate: 120, staleIfError: 300 },
@@ -92,7 +89,7 @@ export function responseCache(options: ResponseCacheOptions = {}): MiddlewareHan
     if (!isMicrocacheCandidate(c)) {
       await next();
       guardUncacheableResponse(c.res);
-      c.res.headers.set("X-Slonks-Cache", "BYPASS");
+      if (!c.res.headers.has("X-Slonks-Cache")) c.res.headers.set("X-Slonks-Cache", "BYPASS");
       return;
     }
 
@@ -203,16 +200,7 @@ function isMicrocacheCandidate(c: Context): boolean {
   const url = new URL(c.req.url);
   const path = url.pathname;
 
-  if (path === "/collection/status" || path === "/collection/distributions" || path === "/holders") {
-    return true;
-  }
-
-  if (path === "/tokens") {
-    if (url.searchParams.has("ids")) return false;
-    if (url.searchParams.has("owner")) return false;
-    if (includeParam(url.searchParams.get("include"), "pixels")) return false;
-    return true;
-  }
+  if (path === "/collection/status") return true;
 
   return false;
 }
@@ -221,11 +209,6 @@ function sMaxage(header: string | null): number {
   if (!header) return 0;
   const match = /(?:^|,)\s*s-maxage=(\d+)\s*(?:,|$)/i.exec(header);
   return match ? Number(match[1]) : 0;
-}
-
-function includeParam(raw: string | null, value: string): boolean {
-  if (!raw) return false;
-  return raw.split(",").some((part) => part.trim().toLowerCase() === value);
 }
 
 function appendVary(c: Context, value: string): void {

@@ -3,7 +3,7 @@ import { and, asc, eq, isNotNull, sql, type SQL } from "drizzle-orm";
 import { getAddress, type Address } from "viem";
 import { db } from "../../db/client.ts";
 import { tokens } from "../../db/schema.ts";
-import { CACHE, setCache } from "../cache.ts";
+import { readThroughStateCache } from "../stateCache.ts";
 
 export const holders = new Hono();
 
@@ -27,46 +27,48 @@ holders.get("/", async (c) => {
   const sort = sp.sort || "count_desc";
   if (!SORTS.has(sort)) return c.json({ error: "invalid sort" }, 400);
 
-  const rows = await db
-    .select({
-      owner: tokens.owner,
-      count: sql<number>`count(*)::int`,
-      mergedCount: sql<number>`count(*) filter (where ${tokens.mergeLevel} > 0)::int`,
-      avgSlop: sql<number | null>`avg(${tokens.slop})::float`,
-      maxSlop: sql<number | null>`max(${tokens.slop})::int`,
-      avgSlopLevel: sql<number | null>`avg(${tokens.slopLevel})::float`,
-      maxSlopLevel: sql<number | null>`max(${tokens.slopLevel})::int`,
-      maxMergeLevel: sql<number>`max(${tokens.mergeLevel})::int`,
-    })
-    .from(tokens)
-    .where(and(eq(tokens.exists, true), isNotNull(tokens.owner)))
-    .groupBy(tokens.owner)
-    .orderBy(...holderOrder(sort))
-    .limit(limit + 1)
-    .offset((page - 1) * limit);
+  const result = await readThroughStateCache(c, "holders", async () => {
+    const rows = await db
+      .select({
+        owner: tokens.owner,
+        count: sql<number>`count(*)::int`,
+        mergedCount: sql<number>`count(*) filter (where ${tokens.mergeLevel} > 0)::int`,
+        avgSlop: sql<number | null>`avg(${tokens.slop})::float`,
+        maxSlop: sql<number | null>`max(${tokens.slop})::int`,
+        avgSlopLevel: sql<number | null>`avg(${tokens.slopLevel})::float`,
+        maxSlopLevel: sql<number | null>`max(${tokens.slopLevel})::int`,
+        maxMergeLevel: sql<number>`max(${tokens.mergeLevel})::int`,
+      })
+      .from(tokens)
+      .where(and(eq(tokens.exists, true), isNotNull(tokens.owner)))
+      .groupBy(tokens.owner)
+      .orderBy(...holderOrder(sort))
+      .limit(limit + 1)
+      .offset((page - 1) * limit);
 
-  const hasMore = rows.length > limit;
-  const visibleRows = hasMore ? rows.slice(0, limit) : rows;
+    const hasMore = rows.length > limit;
+    const visibleRows = hasMore ? rows.slice(0, limit) : rows;
 
-  setCache(c, CACHE.owner);
-  return c.json({
-    chainId: 1,
-    items: visibleRows.map((row) => ({
-      owner: formatOwner(row.owner),
-      count: row.count,
-      mergedCount: row.mergedCount,
-      avgSlop: row.avgSlop,
-      maxSlop: row.maxSlop,
-      avgSlopLevel: row.avgSlopLevel,
-      maxSlopLevel: row.maxSlopLevel,
-      maxMergeLevel: row.maxMergeLevel,
-    })),
-    page,
-    limit,
-    sort,
-    hasMore,
-    nextPage: hasMore ? page + 1 : null,
+    return {
+      chainId: 1,
+      items: visibleRows.map((row) => ({
+        owner: formatOwner(row.owner),
+        count: row.count,
+        mergedCount: row.mergedCount,
+        avgSlop: row.avgSlop,
+        maxSlop: row.maxSlop,
+        avgSlopLevel: row.avgSlopLevel,
+        maxSlopLevel: row.maxSlopLevel,
+        maxMergeLevel: row.maxMergeLevel,
+      })),
+      page,
+      limit,
+      sort,
+      hasMore,
+      nextPage: hasMore ? page + 1 : null,
+    };
   });
+  return c.json(result);
 });
 
 function holderOrder(sort: string): SQL[] {

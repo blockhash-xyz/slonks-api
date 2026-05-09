@@ -134,10 +134,12 @@ describe("API cache helpers", () => {
       setCache(c, { sMaxage: 10, staleWhileRevalidate: 20 });
       return c.json({ error: "nope" }, 500);
     });
-    app.get("/collection/status", (c) => c.json({ ok: true }));
-    app.get("/holders", (c) => {
-      setCache(c, { sMaxage: 10, staleWhileRevalidate: 20 });
-      return c.text("too large");
+    app.get("/collection/status", (c) => {
+      if (c.req.query("large")) {
+        setCache(c, { sMaxage: 10, staleWhileRevalidate: 20 });
+        return c.text("too large");
+      }
+      return c.json({ ok: true });
     });
     app.get("/collection/distributions", (c) => {
       setCache(c, { sMaxage: 10, staleWhileRevalidate: 20 });
@@ -163,7 +165,7 @@ describe("API cache helpers", () => {
     const candidateWithoutCacheHeader = await app.request("/collection/status");
     expect(candidateWithoutCacheHeader.headers.get("X-Slonks-Cache")).toBe("BYPASS");
     expect(candidateWithoutCacheHeader.headers.get("Cache-Control")).toBe("no-store");
-    expect((await app.request("/holders")).headers.get("X-Slonks-Cache")).toBe("BYPASS");
+    expect((await app.request("/collection/status?large=1")).headers.get("X-Slonks-Cache")).toBe("BYPASS");
     expect((await app.request("/collection/distributions")).headers.get("Cache-Control")).toBe("no-store");
 
     expect(await (await app.request("/post", { method: "POST" })).json()).toEqual({ calls: 1 });
@@ -206,6 +208,7 @@ describe("API cache helpers", () => {
 
     for (const path of [
       "/listings",
+      "/tokens",
       "/tokens/1",
       "/tokens?ids=1,2",
       "/tokens?owner=0xabc",
@@ -223,12 +226,10 @@ describe("API cache helpers", () => {
     }
 
     expect((await app.request("/collection/status")).headers.get("X-Slonks-Cache")).toBe("MISS");
-    expect((await app.request("/tokens")).headers.get("X-Slonks-Cache")).toBe("MISS");
   });
 
   test("evicts older entries when cache limits are reached", async () => {
     let aCalls = 0;
-    let bCalls = 0;
     const app = new Hono();
     app.use("*", responseCache({ maxEntries: 1 }));
     app.get("/collection/status", (c) => {
@@ -236,16 +237,11 @@ describe("API cache helpers", () => {
       setCache(c, { sMaxage: 10, staleWhileRevalidate: 20 });
       return c.json({ aCalls });
     });
-    app.get("/holders", (c) => {
-      bCalls++;
-      setCache(c, { sMaxage: 10, staleWhileRevalidate: 20 });
-      return c.json({ bCalls });
-    });
 
-    expect((await app.request("/collection/status")).headers.get("X-Slonks-Cache")).toBe("MISS");
-    expect((await app.request("/holders")).headers.get("X-Slonks-Cache")).toBe("MISS");
-    const evicted = await app.request("/collection/status");
+    expect((await app.request("/collection/status?a=1")).headers.get("X-Slonks-Cache")).toBe("MISS");
+    expect((await app.request("/collection/status?b=2")).headers.get("X-Slonks-Cache")).toBe("MISS");
+    const evicted = await app.request("/collection/status?a=1");
     expect(evicted.headers.get("X-Slonks-Cache")).toBe("MISS");
-    expect(await evicted.json()).toEqual({ aCalls: 2 });
+    expect(await evicted.json()).toEqual({ aCalls: 3 });
   });
 });

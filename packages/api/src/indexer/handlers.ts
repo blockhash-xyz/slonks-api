@@ -169,7 +169,7 @@ async function readBaseSourceId(tokenId: number): Promise<number | null> {
 // embedding (which the manager already stored), recomputes slop against
 // the survivor's base punk, and burns the donor row.
 export async function applyMergeRender(survivorTokenId: number, burnedTokenId: number): Promise<void> {
-  await refreshMergedTokenRender(survivorTokenId);
+  await refreshTokenRenderFromChain(survivorTokenId);
 
   // The burned token's row should already be marked exists=false by its
   // Transfer event to 0x0; clear any stale merge rendering fields if present.
@@ -205,15 +205,15 @@ export async function reconcileMergedTokens(limit = 50): Promise<number> {
 
   let completed = 0;
   for (const row of rows) {
-    if (await refreshMergedTokenRender(row.tokenId)) completed++;
+    if (await refreshTokenRenderFromChain(row.tokenId)) completed++;
   }
   return completed;
 }
 
-async function refreshMergedTokenRender(survivorTokenId: number): Promise<boolean> {
+export async function refreshTokenRenderFromChain(survivorTokenId: number): Promise<boolean> {
   const [survivor] = await db.select().from(tokens).where(eq(tokens.tokenId, survivorTokenId)).limit(1);
   if (!survivor) {
-    console.warn(`refreshMergedTokenRender: survivor ${survivorTokenId} not found`);
+    console.warn(`refreshTokenRenderFromChain: survivor ${survivorTokenId} not found`);
     return false;
   }
 
@@ -237,6 +237,9 @@ async function refreshMergedTokenRender(survivorTokenId: number): Promise<boolea
   const update: Partial<typeof tokens.$inferInsert> = {
     mergeLevel: Number(level),
     mergeEmbedding: embeddingBytes,
+    generatedPixels: null,
+    slop: null,
+    slopLevel: null,
     updatedAt: new Date(),
   };
 
@@ -256,6 +259,14 @@ async function refreshMergedTokenRender(survivorTokenId: number): Promise<boolea
       update.slopLevel = d.slopLevel;
       hasDiff = true;
     }
+  } else if (Number(level) === 0 && survivor.sourceId != null) {
+    const [src] = await db.select().from(sourcePunks).where(eq(sourcePunks.sourceId, survivor.sourceId)).limit(1);
+    if (src) {
+      update.generatedPixels = src.generatedPixels;
+      update.slop = src.baseSlop;
+      update.slopLevel = src.baseSlopLevel;
+      hasDiff = true;
+    }
   }
 
   await db
@@ -263,7 +274,7 @@ async function refreshMergedTokenRender(survivorTokenId: number): Promise<boolea
     .set(update)
     .where(eq(tokens.tokenId, survivorTokenId));
 
-  return Boolean(embeddingBytes && generated && hasDiff);
+  return Boolean(hasDiff || embeddingBytes || Number(level) === 0);
 }
 
 // Placeholder for callers that want to recompute a token snapshot post-reveal

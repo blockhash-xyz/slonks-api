@@ -78,36 +78,43 @@ locally from the bundled model weights.
 - Proof generation endpoints are `POST` and use `no-store`; the API keeps a
   durable Postgres proof cache keyed by token state, plus the prover's short
   in-process cache for repeated work while a machine is warm.
-- Cacheable `GET` responses include `Cache-Control`, `CDN-Cache-Control`,
-  `ETag`, `Vary: Origin`, and `X-Slonks-Cache` headers.
-- Proof, pending-claim, direct token, owner, lineage/history, and PNG responses
-  use `no-store` so frontend state does not lag active ownership or metadata.
+- Cacheable shared `GET` responses include `Cache-Control`,
+  `CDN-Cache-Control`, `ETag`, `Vary: Origin`, and `X-Slonks-Cache` headers.
+- Stateful token, owner, holder, pending-claim, lineage/history, and PNG
+  responses use `no-store` externally but are cached in Redis behind a shared
+  cache version.
 - Errors are shaped like `{ "error": "message" }`.
 
 ## Caching
 
-The API is built to sit behind an edge cache and also keeps a small bounded
-in-process microcache on the Fly `web` machine for predictable lightweight
-`GET` requests. Stateful token metadata is intentionally kept out of shared
-caches so merges, burns, revived embeddings, void locks, and owner views do not
-lag behind the indexer. Cacheable responses use `max-age=0` for browsers,
+The API is built to sit behind an edge cache and also uses Fly Redis for shared
+application caching. Collection status remains shared-cacheable.
+Stateful token metadata is kept out of browser/CDN caches but is cached inside
+Redis under a `token-state` version key. The indexer
+bumps that version when token state changes through transfers, merges, reveal,
+metadata update hints, game locks/unlocks/claims, or active embedding
+set/clear events. That makes old token metadata, PNGs, owner views, holders,
+pending claims, and token-derived distributions unreachable across web
+machines as soon as the indexer sees the event.
+
+Shared-cacheable responses use `max-age=0` for browsers,
 `s-maxage`/`CDN-Cache-Control` for shared caches, `stale-while-revalidate`, and
-`stale-if-error`.
+`stale-if-error`. Stateful app-cached responses use `Cache-Control: no-store`
+and include `X-Slonks-Cache-Version`.
 
 Current shared-cache TTLs:
 
 - Collection status: 15 seconds.
-- Token lists without `ids`, `owner`, or `include=pixels`: 30 seconds.
-- Holders: 30 seconds.
 - Activity feed: 5 seconds.
 - OpenSea listings: 20 seconds.
 
-`X-Slonks-Cache` is `MISS`, `HIT`, or `BYPASS` for the API's in-process cache.
+`X-Slonks-Cache` is `MISS`, `HIT`, or `BYPASS` for API-managed caches.
 Health checks and upstream listing errors use `no-store`.
-Direct token snapshots, bulk token snapshots, token lineage/history, owner
-tokens/summary, token PNG images, pending void claims, and all void proof
-endpoints also use `no-store`. Proof bytes are stored in Postgres by token state
-so a stopped prover machine does not lose already-generated proofs. The prover
+Direct token snapshots, token lists, bulk token snapshots, token
+lineage/history, owner tokens/summary, holders, token PNG images, pending void
+claims, token-derived distributions, and all void proof endpoints use
+`no-store` externally. Proof bytes are stored in Postgres by token state so a
+stopped prover machine does not lose already-generated proofs. The prover
 process also keeps a short in-memory cache while it is warm.
 
 ## Data Shapes
@@ -777,6 +784,9 @@ files hit 100% line, function, and statement coverage.
 ## Environment
 
 - `DATABASE_URL`: required Postgres URL.
+- `REDIS_URL`: optional Fly Redis URL used for shared API response caching.
+- `API_CACHE_TTL_MS`: optional Redis response cache TTL. Default `600000`.
+- `API_CACHE_NAMESPACE`: optional Redis key namespace. Default `slonks-api`.
 - `ALCHEMY_API_KEY`: preferred mainnet RPC provider key.
 - `RPC_URL`: optional fallback RPC URL.
 - `OPENSEA_API_KEY`: optional; enables `/listings`.

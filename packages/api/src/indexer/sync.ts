@@ -20,6 +20,7 @@ import { publicClient } from "../chain/client.ts";
 import { env } from "../env.ts";
 import { db } from "../db/client.ts";
 import { collectionState, slopClaims, tokens } from "../db/schema.ts";
+import { bumpApiCacheVersion } from "../api/stateCache.ts";
 import {
   applyMergeRender,
   ensureToken,
@@ -27,6 +28,7 @@ import {
   recordMerge,
   recordTransfer,
   repairMissingBaseSourceIds,
+  refreshTokenRenderFromChain,
 } from "./handlers.ts";
 
 const ZERO_ADDR = "0x0000000000000000000000000000000000000000";
@@ -72,8 +74,9 @@ export async function syncOnce(): Promise<void> {
       }),
     ]);
 
-    await processSlonksLogs(slonksLogs);
-    await processMergeLogs(mergeLogs);
+    const slonksChanged = await processSlonksLogs(slonksLogs);
+    const mergesChanged = await processMergeLogs(mergeLogs);
+    if (slonksChanged || mergesChanged) await bumpApiCacheVersion();
 
     await db
       .update(collectionState)
@@ -87,7 +90,8 @@ export async function syncOnce(): Promise<void> {
   await syncSlopGameLogs(client, safeLatest);
 }
 
-async function processSlonksLogs(logs: Log[]): Promise<void> {
+async function processSlonksLogs(logs: Log[]): Promise<boolean> {
+  let changed = false;
   for (const log of logs) {
     let decoded;
     try {
@@ -122,6 +126,7 @@ async function processSlonksLogs(logs: Log[]): Promise<void> {
         const isMint = args.from.toLowerCase() === ZERO_ADDR;
         const isBurn = args.to.toLowerCase() === ZERO_ADDR;
         await ensureToken(tokenId, log.blockNumber, isMint, isBurn, args.to.toLowerCase());
+        changed = true;
         break;
       }
       case "Revealed": {
@@ -136,6 +141,7 @@ async function processSlonksLogs(logs: Log[]): Promise<void> {
           })
           .where(eq(collectionState.id, 1));
         await fillSourceIdsAfterReveal(Number(args.offset));
+        changed = true;
         break;
       }
       case "RevealCommitted": {
@@ -148,15 +154,15 @@ async function processSlonksLogs(logs: Log[]): Promise<void> {
       }
       case "BatchMetadataUpdate":
       case "MetadataUpdate":
-        // No-op for now; these are cache-invalidation hints. State changes that
-        // affect metadata (transfers, merges, reveal) are picked up by their own
-        // events.
+        changed = true;
         break;
     }
   }
+  return changed;
 }
 
-async function processMergeLogs(logs: Log[]): Promise<void> {
+async function processMergeLogs(logs: Log[]): Promise<boolean> {
+  let changed = false;
   for (const log of logs) {
     let decoded;
     try {
@@ -180,7 +186,7 @@ async function processMergeLogs(logs: Log[]): Promise<void> {
     };
     const blockTimestamp = await blockTime(log.blockNumber);
 
-    await recordMerge({
+    const inserted = await recordMerge({
       blockNumber: log.blockNumber,
       logIndex: log.logIndex,
       txHash: log.transactionHash,
@@ -190,7 +196,10 @@ async function processMergeLogs(logs: Log[]): Promise<void> {
       mergeLevel: Number(args.mergeLevel),
       blockTimestamp,
     });
+    if (inserted) changed = true;
+    if (inserted) await applyMergeRender(Number(args.tokenId), Number(args.burnedTokenId));
   }
+  return changed;
 }
 
 async function syncSlopGameLogs(client: PublicClient, safeLatest: bigint): Promise<void> {
@@ -220,7 +229,9 @@ async function syncSlopGameLogs(client: PublicClient, safeLatest: bigint): Promi
       toBlock: to,
     });
 
-    await processSlopGameLogs(gameLogs, { claimAfterBlock: gameClaimsCursor });
+    if (await processSlopGameLogs(gameLogs, { claimAfterBlock: gameClaimsCursor })) {
+      await bumpApiCacheVersion();
+    }
 
     if (gameClaimsCursor < to) gameClaimsCursor = to;
 
@@ -260,7 +271,8 @@ async function readActiveSlopGameAddress(client: PublicClient): Promise<Address 
 async function processSlopGameLogs(
   logs: Log[],
   options: { claimAfterBlock?: bigint } = {},
-): Promise<void> {
+): Promise<boolean> {
+  let changed = false;
   for (const log of logs) {
     let decoded;
     try {
@@ -344,6 +356,7 @@ async function processSlopGameLogs(
               updatedAt: new Date(),
             },
           });
+        changed = true;
         break;
       }
       case "SlonkUnlockedFromSlop": {
@@ -373,8 +386,14 @@ async function processSlopGameLogs(
               updatedAt: new Date(),
             },
           });
+        changed = true;
         break;
       }
+      case "ExtensionActiveEmbeddingSet":
+      case "ExtensionActiveEmbeddingCleared":
+        await refreshTokenRenderFromChain(tokenId);
+        changed = true;
+        break;
       case "SlonkVoided": {
         if (!args.owner) break;
         const blockTimestamp = await blockTime(log.blockNumber);
@@ -389,6 +408,7 @@ async function processSlopGameLogs(
           txHash: log.transactionHash,
           blockTimestamp,
         });
+        changed = true;
         break;
       }
       case "SlopClaimed": {
@@ -405,6 +425,7 @@ async function processSlopGameLogs(
           txHash: log.transactionHash,
           blockTimestamp,
         });
+        changed = true;
         break;
       }
       case "SlonkProtocolVoided":
@@ -436,10 +457,12 @@ async function processSlopGameLogs(
               updatedAt: new Date(),
             },
           });
+        changed = true;
         break;
       }
     }
   }
+  return changed;
 }
 
 function shouldProcessGameEvent(blockNumber: bigint, afterBlock: bigint | undefined): boolean {
@@ -513,11 +536,14 @@ async function refreshCollection(safeLatest: bigint): Promise<void> {
     })
     .where(eq(collectionState.id, 1));
 
-  await repairMissingBaseSourceIds();
+  const repaired = await repairMissingBaseSourceIds();
 
   if (revealed && shuffleOffset >= 0) {
     await fillSourceIdsAfterReveal(shuffleOffset);
-    await reconcileMergedTokens();
+    const reconciled = await reconcileMergedTokens();
+    if (repaired > 0 || reconciled > 0) await bumpApiCacheVersion();
+  } else if (repaired > 0) {
+    await bumpApiCacheVersion();
   }
 }
 

@@ -2,6 +2,9 @@ import { z } from "zod";
 
 const schema = z.object({
   DATABASE_URL: z.string().url().optional(),
+  REDIS_URL: z.string().url().optional(),
+  API_CACHE_TTL_MS: z.coerce.number().int().nonnegative().default(10 * 60_000),
+  API_CACHE_NAMESPACE: z.string().default("slonks-api"),
   ALCHEMY_API_KEY: z.string().optional(),
   RPC_URL: z.string().url().optional(),
   OPENSEA_API_KEY: z.string().optional(),

@@ -3,7 +3,7 @@ import { eq } from "drizzle-orm";
 import { encodeSlonkPng } from "@blockhash/slonks-core/png";
 import { db } from "../../db/client.ts";
 import { sourcePunks, tokens } from "../../db/schema.ts";
-import { setNoStore } from "../cache.ts";
+import { readThroughStateCache } from "../stateCache.ts";
 
 export const png: Hono = new Hono();
 
@@ -12,20 +12,27 @@ png.get("/:id{[0-9]+}", async (c) => {
   if (!validTokenId(id)) return c.json({ error: `invalid token id ${id}` }, 400);
   if (c.req.query("scale") != null) return c.json({ error: "custom scaling is not supported" }, 400);
 
-  const [row] = await db
-    .select({ token: tokens, source: sourcePunks })
-    .from(tokens)
-    .leftJoin(sourcePunks, eq(sourcePunks.sourceId, tokens.sourceId))
-    .where(eq(tokens.tokenId, id))
-    .limit(1);
+  const result = await readThroughStateCache(
+    c,
+    `png:${id}`,
+    async () => {
+      const [row] = await db
+        .select({ token: tokens, source: sourcePunks })
+        .from(tokens)
+        .leftJoin(sourcePunks, eq(sourcePunks.sourceId, tokens.sourceId))
+        .where(eq(tokens.tokenId, id))
+        .limit(1);
 
-  if (!row) return c.json({ error: "token not found" }, 404);
+      if (!row) return { status: "not-found" as const };
 
-  const pixels = row.token.generatedPixels ?? row.source?.generatedPixels ?? null;
-  if (!pixels) return c.json({ error: "token image not available" }, 404);
+      const pixels = row.token.generatedPixels ?? row.source?.generatedPixels ?? null;
+      return pixels ? { status: "ok" as const, body: encodeSlonkPng(pixels) } : { status: "unavailable" as const };
+    },
+  );
+  if (result.status === "not-found") return c.json({ error: "token not found" }, 404);
+  if (result.status === "unavailable") return c.json({ error: "token image not available" }, 404);
 
-  const body = encodeSlonkPng(pixels);
-  setNoStore(c);
+  const body = result.body;
   c.header("Content-Type", "image/png");
   c.header("Content-Length", String(body.length));
   c.header("Content-Disposition", `inline; filename="slonk-${id}.png"`);

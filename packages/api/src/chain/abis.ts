@@ -183,6 +183,25 @@ export const slopGameAbi = [
   },
   {
     type: "event",
+    name: "ExtensionActiveEmbeddingSet",
+    inputs: [
+      { name: "extension", type: "address", indexed: true },
+      { name: "tokenId", type: "uint256", indexed: true },
+      { name: "embeddingHash", type: "bytes32", indexed: true },
+    ],
+    anonymous: false,
+  },
+  {
+    type: "event",
+    name: "ExtensionActiveEmbeddingCleared",
+    inputs: [
+      { name: "extension", type: "address", indexed: true },
+      { name: "tokenId", type: "uint256", indexed: true },
+    ],
+    anonymous: false,
+  },
+  {
+    type: "event",
     name: "SlonkUnlockedFromSlop",
     inputs: [
       { name: "tokenId", type: "uint256", indexed: true },

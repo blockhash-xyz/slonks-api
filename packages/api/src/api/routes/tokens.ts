@@ -5,8 +5,8 @@ import { db } from "../../db/client.ts";
 import { collectionState, sourcePunks, tokens, transfers, merges } from "../../db/schema.ts";
 import { buildTokenSnapshot } from "../../lib/snapshot.ts";
 import { buildMergeTree } from "../lineage.ts";
-import { CACHE, setCache, setNoStore } from "../cache.ts";
 import { includeParam, mergeDto, tokenListDto, transferDto } from "../dto.ts";
+import { readThroughStateCache } from "../stateCache.ts";
 
 export const tokens_route: Hono = new Hono();
 
@@ -22,18 +22,19 @@ tokens_route.get("/:id{[0-9]+}", async (c) => {
     return c.json({ error: `invalid token id ${id}` }, 400);
   }
 
-  const [token] = await db.select().from(tokens).where(eq(tokens.tokenId, id)).limit(1);
-  const collection = await getCollection();
-  let source = null;
-  if (token?.sourceId != null) {
-    const [s] = await db.select().from(sourcePunks).where(eq(sourcePunks.sourceId, token.sourceId)).limit(1);
-    source = s ?? null;
-  }
+  const snap = await readThroughStateCache(c, `token:${id}`, async () => {
+    const [token] = await db.select().from(tokens).where(eq(tokens.tokenId, id)).limit(1);
+    const collection = await getCollection();
+    let source = null;
+    if (token?.sourceId != null) {
+      const [s] = await db.select().from(sourcePunks).where(eq(sourcePunks.sourceId, token.sourceId)).limit(1);
+      source = s ?? null;
+    }
 
-  const snap = buildTokenSnapshot(token ?? null, source, collection);
+    return buildTokenSnapshot(token ?? null, source, collection);
+  });
   if (!snap) return c.json({ error: "token not found" }, 404);
 
-  setNoStore(c);
   return c.json(snap);
 });
 
@@ -44,27 +45,29 @@ tokens_route.get("/", async (c) => {
     const ids = parseTokenIds(sp.ids);
     if (typeof ids === "string") return c.json({ error: ids }, 400);
 
-    const [collection, rows] = await Promise.all([
-      getCollection(),
-      db
-        .select({ token: tokens, source: sourcePunks })
-        .from(tokens)
-        .leftJoin(sourcePunks, eq(sourcePunks.sourceId, tokens.sourceId))
-        .where(inArray(tokens.tokenId, ids)),
-    ]);
+    const result = await readThroughStateCache(c, "tokens:bulk", async () => {
+      const [collection, rows] = await Promise.all([
+        getCollection(),
+        db
+          .select({ token: tokens, source: sourcePunks })
+          .from(tokens)
+          .leftJoin(sourcePunks, eq(sourcePunks.sourceId, tokens.sourceId))
+          .where(inArray(tokens.tokenId, ids)),
+      ]);
 
-    const byId = new Map(rows.map((row) => [row.token.tokenId, row]));
-    const items = [];
-    const missingIds = [];
-    for (const id of ids) {
-      const row = byId.get(id);
-      const snap = buildTokenSnapshot(row?.token ?? null, row?.source ?? null, collection);
-      if (snap) items.push(snap);
-      else missingIds.push(id);
-    }
+      const byId = new Map(rows.map((row) => [row.token.tokenId, row]));
+      const items = [];
+      const missingIds = [];
+      for (const id of ids) {
+        const row = byId.get(id);
+        const snap = buildTokenSnapshot(row?.token ?? null, row?.source ?? null, collection);
+        if (snap) items.push(snap);
+        else missingIds.push(id);
+      }
 
-    setNoStore(c);
-    return c.json({ items, count: items.length, missingIds });
+      return { items, count: items.length, missingIds };
+    });
+    return c.json(result);
   }
 
   const includePixels = includeParam(sp.include, "pixels");
@@ -146,39 +149,41 @@ tokens_route.get("/", async (c) => {
       : {}),
   };
 
-  const rows = await db
-    .select(selectFields)
-    .from(tokens)
-    .leftJoin(sourcePunks, eq(sourcePunks.sourceId, tokens.sourceId))
-    .where(
-      and(
-        ...conditions,
-        typeFilter ? eq(sourcePunks.punkType, typeFilter) : undefined,
-        attrFilter ? ilike(sourcePunks.attributesText, `%${attrFilter}%`) : undefined,
-      ),
-    )
-    .orderBy(...order)
-    .limit(limit + 1)
-    .offset(offset);
+  const result = await readThroughStateCache(c, "tokens:list", async () => {
+    const rows = await db
+      .select(selectFields)
+      .from(tokens)
+      .leftJoin(sourcePunks, eq(sourcePunks.sourceId, tokens.sourceId))
+      .where(
+        and(
+          ...conditions,
+          typeFilter ? eq(sourcePunks.punkType, typeFilter) : undefined,
+          attrFilter ? ilike(sourcePunks.attributesText, `%${attrFilter}%`) : undefined,
+        ),
+      )
+      .orderBy(...order)
+      .limit(limit + 1)
+      .offset(offset);
 
-  const hasMore = rows.length > limit;
-  const visibleRows = hasMore ? rows.slice(0, limit) : rows;
-  const items = visibleRows.map((row) => tokenListDto(row, includePixels));
-  const nextPage = hasMore ? page + 1 : null;
+    const hasMore = rows.length > limit;
+    const visibleRows = hasMore ? rows.slice(0, limit) : rows;
+    const items = visibleRows.map((row) => tokenListDto(row, includePixels));
+    const nextPage = hasMore ? page + 1 : null;
 
-  if (includePixels || sp.owner) setNoStore(c);
-  else setCache(c, CACHE.tokenList);
-  return c.json({ items, page, limit, hasMore, nextPage });
+    return { items, page, limit, hasMore, nextPage };
+  });
+  return c.json(result);
 });
 
 // Full merge tree for a token, including nested donors and per-step state changes.
 tokens_route.get("/:id{[0-9]+}/lineage", async (c) => {
   const id = Number(c.req.param("id"));
   if (!validTokenId(id)) return c.json({ error: `invalid token id ${id}` }, 400);
-  const includePixels = includeParam(c.req.query("include"), "pixels");
-  const tree = await buildMergeTree(id, includePixels);
+  const tree = await readThroughStateCache(c, `token:${id}:lineage`, async () => {
+    const includePixels = includeParam(c.req.query("include"), "pixels");
+    return buildMergeTree(id, includePixels);
+  });
   if (!tree) return c.json({ error: "token not found" }, 404);
-  setNoStore(c);
   return c.json(tree);
 });
 
@@ -186,16 +191,18 @@ tokens_route.get("/:id{[0-9]+}/lineage", async (c) => {
 tokens_route.get("/:id{[0-9]+}/history", async (c) => {
   const id = Number(c.req.param("id"));
   if (!validTokenId(id)) return c.json({ error: `invalid token id ${id}` }, 400);
-  const [transfersRows, mergeRows] = await Promise.all([
-    db.select().from(transfers).where(eq(transfers.tokenId, id)).orderBy(asc(transfers.blockNumber)),
-    db
-      .select()
-      .from(merges)
-      .where(or(eq(merges.survivorTokenId, id), eq(merges.burnedTokenId, id)))
-      .orderBy(asc(merges.blockNumber), asc(merges.logIndex)),
-  ]);
-  setNoStore(c);
-  return c.json({ tokenId: id, transfers: transfersRows.map(transferDto), merges: mergeRows.map(mergeDto) });
+  const result = await readThroughStateCache(c, `token:${id}:history`, async () => {
+    const [transfersRows, mergeRows] = await Promise.all([
+      db.select().from(transfers).where(eq(transfers.tokenId, id)).orderBy(asc(transfers.blockNumber)),
+      db
+        .select()
+        .from(merges)
+        .where(or(eq(merges.survivorTokenId, id), eq(merges.burnedTokenId, id)))
+        .orderBy(asc(merges.blockNumber), asc(merges.logIndex)),
+    ]);
+    return { tokenId: id, transfers: transfersRows.map(transferDto), merges: mergeRows.map(mergeDto) };
+  });
+  return c.json(result);
 });
 
 export { tokens_route as tokens };
