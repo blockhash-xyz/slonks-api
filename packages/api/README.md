@@ -80,32 +80,35 @@ locally from the bundled model weights.
   in-process cache for repeated work while a machine is warm.
 - Cacheable `GET` responses include `Cache-Control`, `CDN-Cache-Control`,
   `ETag`, `Vary: Origin`, and `X-Slonks-Cache` headers.
+- Proof, pending-claim, direct token, owner, lineage/history, and PNG responses
+  use `no-store` so frontend state does not lag active ownership or metadata.
 - Errors are shaped like `{ "error": "message" }`.
 
 ## Caching
 
 The API is built to sit behind an edge cache and also keeps a small bounded
 in-process microcache on the Fly `web` machine for predictable lightweight
-`GET` requests. Pixel-heavy lists, bulk token fetches, owner token lists, and
-OpenSea listing pages are intentionally not stored in process memory. Cacheable
-responses use `max-age=0` for browsers, `s-maxage`/`CDN-Cache-Control` for
-shared caches, `stale-while-revalidate`, and `stale-if-error`.
+`GET` requests. Stateful token metadata is intentionally kept out of shared
+caches so merges, burns, revived embeddings, void locks, and owner views do not
+lag behind the indexer. Cacheable responses use `max-age=0` for browsers,
+`s-maxage`/`CDN-Cache-Control` for shared caches, `stale-while-revalidate`, and
+`stale-if-error`.
 
 Current shared-cache TTLs:
 
 - Collection status: 15 seconds.
-- Token snapshots, bulk token snapshots, history, and lineage: 60 seconds.
-- Token PNG images: 1 hour.
-- Token lists, owner endpoints, and holders: 30 seconds.
+- Token lists without `ids`, `owner`, or `include=pixels`: 30 seconds.
+- Holders: 30 seconds.
 - Activity feed: 5 seconds.
-- Pending void claims: 5 seconds.
 - OpenSea listings: 20 seconds.
 
 `X-Slonks-Cache` is `MISS`, `HIT`, or `BYPASS` for the API's in-process cache.
 Health checks and upstream listing errors use `no-store`.
-Void proof responses also use `no-store`; proof bytes are stored in Postgres by
-token state so a stopped prover machine does not lose already-generated proofs.
-The prover process also keeps a short in-memory cache while it is warm.
+Direct token snapshots, bulk token snapshots, token lineage/history, owner
+tokens/summary, token PNG images, pending void claims, and all void proof
+endpoints also use `no-store`. Proof bytes are stored in Postgres by token state
+so a stopped prover machine does not lose already-generated proofs. The prover
+process also keeps a short in-memory cache while it is warm.
 
 ## Data Shapes
 

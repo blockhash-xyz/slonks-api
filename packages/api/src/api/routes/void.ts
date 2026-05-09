@@ -4,7 +4,7 @@ import { getAddress, isAddress } from "viem";
 import { CONTRACTS } from "../../chain/contracts.ts";
 import { db } from "../../db/client.ts";
 import { slopClaims, sourcePunks, tokens } from "../../db/schema.ts";
-import { CACHE, setCache } from "../cache.ts";
+import { setNoStore } from "../cache.ts";
 import { includeParam, tokenListDto } from "../dto.ts";
 
 export const voidRoutes = new Hono();
@@ -90,7 +90,7 @@ voidRoutes.get("/pending-claims", async (c) => {
     lockedAtTimestamp: row.lockedAtTimestamp?.toISOString() ?? null,
   }));
 
-  setCache(c, CACHE.pendingClaims);
+  setNoStore(c);
   return c.json({
     chainId: 1,
     contracts: {

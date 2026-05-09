@@ -31,12 +31,9 @@ const DEFAULT_MAX_RESPONSE_BYTES = 512 * 1024;
 export const CACHE = {
   collectionStatus: { sMaxage: 15, staleWhileRevalidate: 60, staleIfError: 300 },
   collectionStats: { sMaxage: 60, staleWhileRevalidate: 300, staleIfError: 600 },
-  tokenSnapshot: { sMaxage: 60, staleWhileRevalidate: 300, staleIfError: 600 },
-  tokenImage: { sMaxage: 3600, staleWhileRevalidate: 86_400, staleIfError: 86_400 },
   tokenList: { sMaxage: 30, staleWhileRevalidate: 120, staleIfError: 300 },
   owner: { sMaxage: 30, staleWhileRevalidate: 120, staleIfError: 300 },
   activity: { sMaxage: 5, staleWhileRevalidate: 30, staleIfError: 120 },
-  pendingClaims: { sMaxage: 5, staleWhileRevalidate: 30, staleIfError: 120 },
   listings: { sMaxage: 20, staleWhileRevalidate: 60, staleIfError: 120 },
   preview: { sMaxage: 30, staleWhileRevalidate: 120, staleIfError: 300 },
 } as const satisfies Record<string, CachePolicy>;
@@ -210,23 +207,9 @@ function isMicrocacheCandidate(c: Context): boolean {
     return true;
   }
 
-  if (/^\/tokens\/\d+$/.test(path)) return true;
-  if (/^\/png\/\d+$/.test(path)) return true;
-  if (/^\/owners\/[^/]+\/summary$/.test(path)) return true;
-
-  if (path === "/void/pending-claims") {
-    if (
-      includeParam(url.searchParams.get("include"), "pixels") &&
-      !url.searchParams.has("owner") &&
-      !url.searchParams.has("recipient")
-    ) {
-      return false;
-    }
-    return true;
-  }
-
   if (path === "/tokens") {
     if (url.searchParams.has("ids")) return false;
+    if (url.searchParams.has("owner")) return false;
     if (includeParam(url.searchParams.get("include"), "pixels")) return false;
     return true;
   }

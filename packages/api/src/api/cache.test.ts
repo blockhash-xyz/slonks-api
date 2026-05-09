@@ -39,29 +39,29 @@ describe("API cache helpers", () => {
     const app = new Hono();
     app.use("*", responseCache({ now: () => now, maxEntries: 2, maxBytes: 10_000, maxResponseBytes: 1_000 }));
     app.use("*", conditionalEtag());
-    app.get("/tokens/1", (c) => {
+    app.get("/collection/status", (c) => {
       calls++;
       setCache(c, { sMaxage: 10, staleWhileRevalidate: 20 });
       return c.json({ calls });
     });
 
-    const first = await app.request("/tokens/1");
+    const first = await app.request("/collection/status");
     expect(first.headers.get("X-Slonks-Cache")).toBe("MISS");
     expect(await first.json()).toEqual({ calls: 1 });
 
-    const second = await app.request("/tokens/1");
+    const second = await app.request("/collection/status");
     expect(second.headers.get("X-Slonks-Cache")).toBe("HIT");
     expect(second.headers.get("Age")).toBe("0");
     expect(await second.json()).toEqual({ calls: 1 });
 
     const etagValue = second.headers.get("ETag");
     expect(etagValue).toBeTruthy();
-    const notModified = await app.request("/tokens/1", { headers: { "If-None-Match": `W/${etagValue}` } });
+    const notModified = await app.request("/collection/status", { headers: { "If-None-Match": `W/${etagValue}` } });
     expect(notModified.status).toBe(304);
     expect(notModified.headers.get("X-Slonks-Cache")).toBe("HIT");
 
     now += 11_000;
-    const expired = await app.request("/tokens/1");
+    const expired = await app.request("/collection/status");
     expect(expired.headers.get("X-Slonks-Cache")).toBe("MISS");
     expect(await expired.json()).toEqual({ calls: 2 });
   });
@@ -74,16 +74,16 @@ describe("API cache helpers", () => {
     });
     const app = new Hono();
     app.use("*", responseCache({ maxResponseBytes: 1_000 }));
-    app.get("/tokens/1", async (c) => {
+    app.get("/collection/status", async (c) => {
       calls++;
       await blocker;
       setCache(c, { sMaxage: 10, staleWhileRevalidate: 20 });
       return c.json({ calls });
     });
 
-    const firstRequest = app.request("/tokens/1");
+    const firstRequest = app.request("/collection/status");
     await Promise.resolve();
-    const secondRequest = app.request("/tokens/1");
+    const secondRequest = app.request("/collection/status");
     release();
 
     const [first, second] = await Promise.all([firstRequest, secondRequest]);
@@ -98,7 +98,7 @@ describe("API cache helpers", () => {
     let calls = 0;
     const app = new Hono();
     app.use("*", responseCache({ maxResponseBytes: 1_000 }));
-    app.get("/tokens/1", (c) => {
+    app.get("/collection/status", (c) => {
       calls++;
       if (calls === 1) throw new Error("boom");
       setCache(c, { sMaxage: 10, staleWhileRevalidate: 20 });
@@ -106,13 +106,11 @@ describe("API cache helpers", () => {
     });
     app.onError((err, c) => c.json({ error: err.message }, 500));
 
-    expect((await app.request("/tokens/1")).status).toBe(500);
-    const recovered = await app.request("/tokens/1");
+    expect((await app.request("/collection/status")).status).toBe(500);
+    const recovered = await app.request("/collection/status");
     expect(recovered.headers.get("X-Slonks-Cache")).toBe("MISS");
     expect(await recovered.json()).toEqual({ calls: 2 });
   });
-
-
 
   test("bypasses uncacheable methods and responses", async () => {
     let calls = 0;
@@ -136,12 +134,12 @@ describe("API cache helpers", () => {
       setCache(c, { sMaxage: 10, staleWhileRevalidate: 20 });
       return c.json({ error: "nope" }, 500);
     });
-    app.get("/tokens/3", (c) => c.json({ ok: true }));
-    app.get("/tokens/4", (c) => {
+    app.get("/collection/status", (c) => c.json({ ok: true }));
+    app.get("/holders", (c) => {
       setCache(c, { sMaxage: 10, staleWhileRevalidate: 20 });
       return c.text("too large");
     });
-    app.get("/tokens/5", (c) => {
+    app.get("/collection/distributions", (c) => {
       setCache(c, { sMaxage: 10, staleWhileRevalidate: 20 });
       c.header("Set-Cookie", "a=b");
       return c.json({ ok: true });
@@ -162,11 +160,11 @@ describe("API cache helpers", () => {
     }
     expect((await app.request("/error")).headers.get("Cache-Control")).toBe("no-store");
 
-    const candidateWithoutCacheHeader = await app.request("/tokens/3");
+    const candidateWithoutCacheHeader = await app.request("/collection/status");
     expect(candidateWithoutCacheHeader.headers.get("X-Slonks-Cache")).toBe("BYPASS");
     expect(candidateWithoutCacheHeader.headers.get("Cache-Control")).toBe("no-store");
-    expect((await app.request("/tokens/4")).headers.get("X-Slonks-Cache")).toBe("BYPASS");
-    expect((await app.request("/tokens/5")).headers.get("Cache-Control")).toBe("no-store");
+    expect((await app.request("/holders")).headers.get("X-Slonks-Cache")).toBe("BYPASS");
+    expect((await app.request("/collection/distributions")).headers.get("Cache-Control")).toBe("no-store");
 
     expect(await (await app.request("/post", { method: "POST" })).json()).toEqual({ calls: 1 });
     expect(await (await app.request("/post", { method: "POST" })).json()).toEqual({ calls: 2 });
@@ -188,6 +186,10 @@ describe("API cache helpers", () => {
       setCache(c, { sMaxage: 10, staleWhileRevalidate: 20 });
       return c.json({ tokens: [{ tokenId: "1" }] });
     });
+    app.get("/owners/:address/summary", (c) => {
+      setCache(c, { sMaxage: 10, staleWhileRevalidate: 20 });
+      return c.json({ total: 1 });
+    });
     app.get("/collection/status", (c) => {
       setCache(c, { sMaxage: 10, staleWhileRevalidate: 20 });
       return c.json({ phase: "revealed" });
@@ -204,10 +206,16 @@ describe("API cache helpers", () => {
 
     for (const path of [
       "/listings",
+      "/tokens/1",
       "/tokens?ids=1,2",
+      "/tokens?owner=0xabc",
       "/tokens?include=pixels",
       "/owners/0xabc/tokens",
+      "/owners/0xabc/summary",
+      "/png/1",
+      "/void/pending-claims",
       "/void/pending-claims?include=pixels",
+      "/void/pending-claims?recipient=0xabc&include=pixels",
     ]) {
       const res = await app.request(path);
       expect(res.headers.get("X-Slonks-Cache")).toBe("BYPASS");
@@ -216,15 +224,6 @@ describe("API cache helpers", () => {
 
     expect((await app.request("/collection/status")).headers.get("X-Slonks-Cache")).toBe("MISS");
     expect((await app.request("/tokens")).headers.get("X-Slonks-Cache")).toBe("MISS");
-    expect((await app.request("/void/pending-claims")).headers.get("X-Slonks-Cache")).toBe("MISS");
-    expect((await app.request("/void/pending-claims?recipient=0xabc&include=pixels")).headers.get("X-Slonks-Cache")).toBe(
-      "MISS",
-    );
-    expect((await app.request("/void/pending-claims?recipient=0xabc&include=pixels")).headers.get("X-Slonks-Cache")).toBe(
-      "HIT",
-    );
-    expect((await app.request("/png/1")).headers.get("X-Slonks-Cache")).toBe("MISS");
-    expect((await app.request("/png/1")).headers.get("X-Slonks-Cache")).toBe("HIT");
   });
 
   test("evicts older entries when cache limits are reached", async () => {
@@ -232,20 +231,20 @@ describe("API cache helpers", () => {
     let bCalls = 0;
     const app = new Hono();
     app.use("*", responseCache({ maxEntries: 1 }));
-    app.get("/tokens/1", (c) => {
+    app.get("/collection/status", (c) => {
       aCalls++;
       setCache(c, { sMaxage: 10, staleWhileRevalidate: 20 });
       return c.json({ aCalls });
     });
-    app.get("/tokens/2", (c) => {
+    app.get("/holders", (c) => {
       bCalls++;
       setCache(c, { sMaxage: 10, staleWhileRevalidate: 20 });
       return c.json({ bCalls });
     });
 
-    expect((await app.request("/tokens/1")).headers.get("X-Slonks-Cache")).toBe("MISS");
-    expect((await app.request("/tokens/2")).headers.get("X-Slonks-Cache")).toBe("MISS");
-    const evicted = await app.request("/tokens/1");
+    expect((await app.request("/collection/status")).headers.get("X-Slonks-Cache")).toBe("MISS");
+    expect((await app.request("/holders")).headers.get("X-Slonks-Cache")).toBe("MISS");
+    const evicted = await app.request("/collection/status");
     expect(evicted.headers.get("X-Slonks-Cache")).toBe("MISS");
     expect(await evicted.json()).toEqual({ aCalls: 2 });
   });

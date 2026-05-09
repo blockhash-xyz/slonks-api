@@ -5,7 +5,7 @@ import { db } from "../../db/client.ts";
 import { collectionState, sourcePunks, tokens, transfers, merges } from "../../db/schema.ts";
 import { buildTokenSnapshot } from "../../lib/snapshot.ts";
 import { buildMergeTree } from "../lineage.ts";
-import { CACHE, setCache } from "../cache.ts";
+import { CACHE, setCache, setNoStore } from "../cache.ts";
 import { includeParam, mergeDto, tokenListDto, transferDto } from "../dto.ts";
 
 export const tokens_route: Hono = new Hono();
@@ -33,7 +33,7 @@ tokens_route.get("/:id{[0-9]+}", async (c) => {
   const snap = buildTokenSnapshot(token ?? null, source, collection);
   if (!snap) return c.json({ error: "token not found" }, 404);
 
-  setCache(c, CACHE.tokenSnapshot);
+  setNoStore(c);
   return c.json(snap);
 });
 
@@ -63,7 +63,7 @@ tokens_route.get("/", async (c) => {
       else missingIds.push(id);
     }
 
-    setCache(c, CACHE.tokenSnapshot);
+    setNoStore(c);
     return c.json({ items, count: items.length, missingIds });
   }
 
@@ -166,7 +166,8 @@ tokens_route.get("/", async (c) => {
   const items = visibleRows.map((row) => tokenListDto(row, includePixels));
   const nextPage = hasMore ? page + 1 : null;
 
-  setCache(c, CACHE.tokenList);
+  if (includePixels || sp.owner) setNoStore(c);
+  else setCache(c, CACHE.tokenList);
   return c.json({ items, page, limit, hasMore, nextPage });
 });
 
@@ -177,7 +178,7 @@ tokens_route.get("/:id{[0-9]+}/lineage", async (c) => {
   const includePixels = includeParam(c.req.query("include"), "pixels");
   const tree = await buildMergeTree(id, includePixels);
   if (!tree) return c.json({ error: "token not found" }, 404);
-  setCache(c, CACHE.tokenSnapshot);
+  setNoStore(c);
   return c.json(tree);
 });
 
@@ -193,7 +194,7 @@ tokens_route.get("/:id{[0-9]+}/history", async (c) => {
       .where(or(eq(merges.survivorTokenId, id), eq(merges.burnedTokenId, id)))
       .orderBy(asc(merges.blockNumber), asc(merges.logIndex)),
   ]);
-  setCache(c, CACHE.tokenSnapshot);
+  setNoStore(c);
   return c.json({ tokenId: id, transfers: transfersRows.map(transferDto), merges: mergeRows.map(mergeDto) });
 });
 

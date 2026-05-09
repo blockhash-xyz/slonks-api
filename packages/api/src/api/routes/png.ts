@@ -3,7 +3,7 @@ import { eq } from "drizzle-orm";
 import { encodeSlonkPng } from "@blockhash/slonks-core/png";
 import { db } from "../../db/client.ts";
 import { sourcePunks, tokens } from "../../db/schema.ts";
-import { CACHE, setCache } from "../cache.ts";
+import { setNoStore } from "../cache.ts";
 
 export const png: Hono = new Hono();
 
@@ -25,7 +25,7 @@ png.get("/:id{[0-9]+}", async (c) => {
   if (!pixels) return c.json({ error: "token image not available" }, 404);
 
   const body = encodeSlonkPng(pixels);
-  setCache(c, CACHE.tokenImage);
+  setNoStore(c);
   c.header("Content-Type", "image/png");
   c.header("Content-Length", String(body.length));
   c.header("Content-Disposition", `inline; filename="slonk-${id}.png"`);
