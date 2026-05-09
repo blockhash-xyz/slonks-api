@@ -29,6 +29,7 @@ https://api.slonks.xyz
 - `SlonksMergeManager`: `0x7bda4820dbcfe471a2e23d3fa069c1cd261401e1`
 - `SLOP`: `0x999b49c0d1612e619a4a4f6280733184da025108`
 - `SlopGameV2`: `0x886612a7a8dba8bbced8f86d26c1114857ccd9da`
+- `Previous SlopGame`: `0xb4ffbcce990a9a0b5f84722ba2d5db4e7bfc9d11`
 - `SlopDutchAuctionExtension`: `0xfeff27e2b255e8656e083bcda6bfae5984913dfd`
 - `HonkVerifier`: `0x5cbe9cbedc27dd4f082119586f5d924645064eb3`
 - `CryptoPunksData`: `0x16f5a35647d6f03d5d3da7b35409d65ba03af3b2`
@@ -455,9 +456,10 @@ Returns:
 
 ### `GET /void/pending-claims`
 
-Slonks currently locked in the active SlopGameV2 with a pending SLOP claim. These
-tokens are owned by the game contract onchain, but `claimRecipient` is the
-address that locked the Slonk and will receive the SLOP when claimed.
+Slonks currently locked in a SLOP game with a pending SLOP claim. `lockedOn` is
+the contract currently holding the Slonk. If it is `contracts.activeGame`, the
+token is pending a V2 SLOP claim. If it is `contracts.previousGame`, the token
+can be withdrawn from the old game with `unlockSlonk(tokenId)`.
 
 Query params:
 
@@ -477,6 +479,10 @@ Returns:
 ```ts
 {
   chainId: 1;
+  contracts: {
+    activeGame: string;
+    previousGame: string;
+  };
   owner?: string;
   count: number;
   page: number;
@@ -486,6 +492,7 @@ Returns:
   items: Array<TokenListItem & {
     claimStatus: "pending";
     claimRecipient: string | null;
+    lockedOn: string | null;
     lockedAtBlock: string | null;
     lockedAtLogIndex: number | null;
     lockedAtTxHash: string | null;

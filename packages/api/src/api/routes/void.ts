@@ -1,5 +1,5 @@
 import { Hono } from "hono";
-import { and, asc, desc, eq, sql, type SQL } from "drizzle-orm";
+import { and, asc, desc, eq, inArray, sql, type SQL } from "drizzle-orm";
 import { getAddress, isAddress } from "viem";
 import { CONTRACTS } from "../../chain/contracts.ts";
 import { db } from "../../db/client.ts";
@@ -9,8 +9,10 @@ import { includeParam, tokenListDto } from "../dto.ts";
 
 export const voidRoutes = new Hono();
 const ACTIVE_GAME_OWNER = CONTRACTS.slopGame.toLowerCase();
+const OLD_GAME_OWNER = CONTRACTS.oldSlopGame.toLowerCase();
+const LOCKING_CONTRACTS = [ACTIVE_GAME_OWNER, OLD_GAME_OWNER];
 
-// Slonks locked in the active SLOP game with an unclaimed SLOP claim.
+// Slonks locked in a SLOP game with an unclaimed SLOP claim.
 voidRoutes.get("/pending-claims", async (c) => {
   const sp = c.req.query();
   const page = Number(sp.page ?? 1);
@@ -23,7 +25,7 @@ voidRoutes.get("/pending-claims", async (c) => {
   const conditions: SQL[] = [
     eq(slopClaims.status, "pending"),
     eq(tokens.exists, true),
-    eq(tokens.owner, ACTIVE_GAME_OWNER),
+    inArray(tokens.owner, LOCKING_CONTRACTS),
   ];
   if (owner) {
     if (!isAddress(owner)) return c.json({ error: "invalid owner" }, 400);
@@ -79,6 +81,7 @@ voidRoutes.get("/pending-claims", async (c) => {
     ...tokenListDto(row, includePixels),
     claimStatus: "pending",
     claimRecipient: row.claimRecipient ? getAddress(row.claimRecipient) : null,
+    lockedOn: row.owner ? getAddress(row.owner) : null,
     lockedAtBlock: row.lockedAtBlock?.toString() ?? null,
     lockedAtLogIndex: row.lockedAtLogIndex,
     lockedAtTxHash: row.lockedAtTxHash,
@@ -88,6 +91,10 @@ voidRoutes.get("/pending-claims", async (c) => {
   setCache(c, CACHE.pendingClaims);
   return c.json({
     chainId: 1,
+    contracts: {
+      activeGame: getAddress(CONTRACTS.slopGame),
+      previousGame: getAddress(CONTRACTS.oldSlopGame),
+    },
     owner: owner ? getAddress(owner) : undefined,
     count: countRow[0]?.count ?? 0,
     page,
