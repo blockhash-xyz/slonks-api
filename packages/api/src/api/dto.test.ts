@@ -77,6 +77,33 @@ describe("API DTO helpers", () => {
     ).toMatchObject({ generatedPixels: "0x0304", originalRgba: null });
   });
 
+  test("maps claim custody status onto token list rows", () => {
+    expect(
+      tokenListDto(
+        {
+          tokenId: 10,
+          exists: true,
+          owner: "0xgame",
+          sourceId: 1,
+          baseSourceId: 2,
+          mergeLevel: 0,
+          slop: 10,
+          slopLevel: 0,
+          punkType: "Male",
+          attributesText: "Male",
+          claimStatus: "claimed",
+          claimRecipient: "0xowner",
+        },
+        false,
+      ),
+    ).toMatchObject({
+      status: "voided",
+      claimStatus: "claimed",
+      claimRecipient: "0xowner",
+      lockedOn: "0xgame",
+    });
+  });
+
   test("detects include params case-insensitively", () => {
     expect(includeParam(undefined, "pixels")).toBe(false);
     expect(includeParam("tokens, Pixels", "pixels")).toBe(true);

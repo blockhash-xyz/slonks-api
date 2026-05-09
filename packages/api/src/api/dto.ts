@@ -1,5 +1,6 @@
 import { bytesToHex } from "@blockhash/slonks-core/hex";
 import type { MergeRow, TransferRow } from "../db/schema.ts";
+import { isCustodiedClaimStatus, tokenStatus } from "../lib/snapshot.ts";
 
 export type TokenListRow = {
   tokenId: number;
@@ -15,6 +16,8 @@ export type TokenListRow = {
   generatedPixels?: Uint8Array | null;
   sourceGeneratedPixels?: Uint8Array | null;
   originalRgba?: Uint8Array | null;
+  claimStatus?: string | null;
+  claimRecipient?: string | null;
 };
 
 export function tokenListDto(row: TokenListRow, includePixels: boolean) {
@@ -22,8 +25,13 @@ export function tokenListDto(row: TokenListRow, includePixels: boolean) {
     tokenId: row.tokenId,
   };
 
-  if ("exists" in row) item.status = row.exists ? "active" : "burned";
+  if ("exists" in row) item.status = tokenStatus(row.exists, row.claimStatus);
   if ("owner" in row) item.owner = row.owner;
+  if ("claimStatus" in row) {
+    item.claimStatus = row.claimStatus ?? null;
+    item.claimRecipient = row.claimRecipient ?? null;
+    item.lockedOn = row.owner && isCustodiedClaimStatus(row.claimStatus) ? row.owner : null;
+  }
 
   Object.assign(item, {
     sourceId: row.sourceId,

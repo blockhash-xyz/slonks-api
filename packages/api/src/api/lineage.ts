@@ -1,6 +1,16 @@
 import { asc, inArray } from "drizzle-orm";
 import { db } from "../db/client.ts";
-import { merges, sourcePunks, tokens, type MergeRow, type SourcePunkRow, type TokenRow } from "../db/schema.ts";
+import {
+  merges,
+  slopClaims,
+  sourcePunks,
+  tokens,
+  type MergeRow,
+  type SlopClaimRow,
+  type SourcePunkRow,
+  type TokenRow,
+} from "../db/schema.ts";
+import { tokenStatus, type TokenStatus } from "../lib/snapshot.ts";
 import { blendEmbeddings } from "@blockhash/slonks-core/blend";
 import { diffPixels } from "@blockhash/slonks-core/diff";
 import { bytesToHex, hexToBytes } from "@blockhash/slonks-core/hex";
@@ -34,9 +44,11 @@ type MergeTreeStep = {
 
 type MergeTreeNode = {
   tokenId: number;
-  status: "active" | "burned";
+  status: TokenStatus;
   exists: boolean;
   owner: string | null;
+  claimStatus: string | null;
+  claimRecipient: string | null;
   sourceId: number | null;
   baseSourceId: number | null;
   punkType: string | null;
@@ -61,6 +73,7 @@ type BuildContext = {
   includePixels: boolean;
   bySurvivor: Map<number, OrderedMerge[]>;
   tokensById: Map<number, TokenRow>;
+  claimsById: Map<number, SlopClaimRow>;
   sourcesById: Map<number, SourcePunkRow>;
 };
 
@@ -77,6 +90,12 @@ export async function buildMergeTree(tokenId: number, includePixels: boolean): P
   const tokensById = new Map(tokenRows.map((row) => [row.tokenId, row]));
   if (!tokensById.has(tokenId) && !bySurvivor.has(tokenId)) return null;
 
+  const claimRows =
+    reachable.tokenIds.size > 0
+      ? await db.select().from(slopClaims).where(inArray(slopClaims.tokenId, [...reachable.tokenIds]))
+      : [];
+  const claimsById = new Map(claimRows.map((row) => [row.tokenId, row]));
+
   const sourceIds = new Set<number>();
   for (const token of tokenRows) {
     if (token.sourceId != null) sourceIds.add(token.sourceId);
@@ -89,6 +108,7 @@ export async function buildMergeTree(tokenId: number, includePixels: boolean): P
     includePixels,
     bySurvivor,
     tokensById,
+    claimsById,
     sourcesById,
   };
   const root = buildNode(tokenId, Number.POSITIVE_INFINITY, context, new Set());
@@ -136,6 +156,7 @@ function buildNode(tokenId: number, cutoffOrder: number, context: BuildContext, 
   stack.add(tokenId);
 
   const token = context.tokensById.get(tokenId) ?? null;
+  const claim = context.claimsById.get(tokenId) ?? null;
   const source = token?.sourceId == null ? null : context.sourcesById.get(token.sourceId) ?? null;
   const initial = initialState(tokenId, token, source, context.includePixels);
   let current = initial;
@@ -167,9 +188,11 @@ function buildNode(tokenId: number, cutoffOrder: number, context: BuildContext, 
   stack.delete(tokenId);
   return {
     tokenId,
-    status: token?.exists ? "active" : "burned",
+    status: tokenStatus(token?.exists, claim?.status),
     exists: token?.exists ?? false,
     owner: token?.owner ?? null,
+    claimStatus: claim?.status ?? null,
+    claimRecipient: claim?.recipient ?? null,
     sourceId: token?.sourceId ?? null,
     baseSourceId: token?.baseSourceId ?? null,
     punkType: source?.punkType ?? null,

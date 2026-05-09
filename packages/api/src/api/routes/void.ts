@@ -45,6 +45,7 @@ voidRoutes.get("/pending-claims", async (c) => {
     slopLevel: tokens.slopLevel,
     punkType: sourcePunks.punkType,
     attributesText: sourcePunks.attributesText,
+    claimStatus: slopClaims.status,
     claimRecipient: slopClaims.recipient,
     lockedAtBlock: slopClaims.lockedAtBlock,
     lockedAtLogIndex: slopClaims.lockedAtLogIndex,

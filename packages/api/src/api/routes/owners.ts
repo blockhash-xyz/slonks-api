@@ -2,7 +2,7 @@ import { Hono } from "hono";
 import { and, asc, eq, sql } from "drizzle-orm";
 import { isAddress, getAddress } from "viem";
 import { db } from "../../db/client.ts";
-import { tokens, sourcePunks } from "../../db/schema.ts";
+import { tokens, sourcePunks, slopClaims } from "../../db/schema.ts";
 import { includeParam, tokenListDto } from "../dto.ts";
 import { readThroughStateCache } from "../stateCache.ts";
 
@@ -24,6 +24,8 @@ owners.get("/:address/tokens", async (c) => {
     slopLevel: tokens.slopLevel,
     punkType: sourcePunks.punkType,
     attributesText: sourcePunks.attributesText,
+    claimStatus: slopClaims.status,
+    claimRecipient: slopClaims.recipient,
     ...(includePixels
       ? {
           generatedPixels: tokens.generatedPixels,
@@ -38,6 +40,7 @@ owners.get("/:address/tokens", async (c) => {
       .select(selectFields)
       .from(tokens)
       .leftJoin(sourcePunks, eq(sourcePunks.sourceId, tokens.sourceId))
+      .leftJoin(slopClaims, eq(slopClaims.tokenId, tokens.tokenId))
       .where(and(eq(tokens.exists, true), eq(tokens.owner, lower)))
       .orderBy(asc(tokens.tokenId));
 

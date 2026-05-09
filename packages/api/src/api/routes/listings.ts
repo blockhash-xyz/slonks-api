@@ -2,7 +2,7 @@ import { Hono } from "hono";
 import { eq, inArray } from "drizzle-orm";
 import { env } from "../../env.ts";
 import { db } from "../../db/client.ts";
-import { collectionState, sourcePunks, tokens } from "../../db/schema.ts";
+import { collectionState, sourcePunks, tokens, slopClaims } from "../../db/schema.ts";
 import { buildTokenSnapshot, type TokenSnapshot } from "../../lib/snapshot.ts";
 import { CACHE, setCache, setNoStore } from "../cache.ts";
 import { includeParam } from "../dto.ts";
@@ -145,16 +145,17 @@ async function snapshotsByTokenId(tokenIds: string[]): Promise<Record<string, To
   const [[collection], rows] = await Promise.all([
     db.select().from(collectionState).where(eq(collectionState.id, 1)).limit(1),
     db
-      .select({ token: tokens, source: sourcePunks })
+      .select({ token: tokens, source: sourcePunks, claim: slopClaims })
       .from(tokens)
       .leftJoin(sourcePunks, eq(sourcePunks.sourceId, tokens.sourceId))
+      .leftJoin(slopClaims, eq(slopClaims.tokenId, tokens.tokenId))
       .where(inArray(tokens.tokenId, ids)),
   ]);
   if (!collection) return {};
 
   const snapshots: Record<string, TokenSnapshot> = {};
   for (const row of rows) {
-    const snapshot = buildTokenSnapshot(row.token, row.source, collection);
+    const snapshot = buildTokenSnapshot(row.token, row.source, collection, row.claim);
     if (snapshot) snapshots[snapshot.tokenId] = snapshot;
   }
   return snapshots;

@@ -2,7 +2,7 @@ import { Hono } from "hono";
 import { and, asc, desc, eq, gte, ilike, inArray, lte, or, type SQL } from "drizzle-orm";
 import { isAddress } from "viem";
 import { db } from "../../db/client.ts";
-import { collectionState, sourcePunks, tokens, transfers, merges } from "../../db/schema.ts";
+import { collectionState, sourcePunks, tokens, transfers, merges, slopClaims } from "../../db/schema.ts";
 import { buildTokenSnapshot } from "../../lib/snapshot.ts";
 import { buildMergeTree } from "../lineage.ts";
 import { includeParam, mergeDto, tokenListDto, transferDto } from "../dto.ts";
@@ -23,15 +23,18 @@ tokens_route.get("/:id{[0-9]+}", async (c) => {
   }
 
   const snap = await readThroughStateCache(c, `token:${id}`, async () => {
-    const [token] = await db.select().from(tokens).where(eq(tokens.tokenId, id)).limit(1);
-    const collection = await getCollection();
-    let source = null;
-    if (token?.sourceId != null) {
-      const [s] = await db.select().from(sourcePunks).where(eq(sourcePunks.sourceId, token.sourceId)).limit(1);
-      source = s ?? null;
-    }
+    const [[row], collection] = await Promise.all([
+      db
+        .select({ token: tokens, source: sourcePunks, claim: slopClaims })
+        .from(tokens)
+        .leftJoin(sourcePunks, eq(sourcePunks.sourceId, tokens.sourceId))
+        .leftJoin(slopClaims, eq(slopClaims.tokenId, tokens.tokenId))
+        .where(eq(tokens.tokenId, id))
+        .limit(1),
+      getCollection(),
+    ]);
 
-    return buildTokenSnapshot(token ?? null, source, collection);
+    return buildTokenSnapshot(row?.token ?? null, row?.source ?? null, collection, row?.claim ?? null);
   });
   if (!snap) return c.json({ error: "token not found" }, 404);
 
@@ -49,9 +52,10 @@ tokens_route.get("/", async (c) => {
       const [collection, rows] = await Promise.all([
         getCollection(),
         db
-          .select({ token: tokens, source: sourcePunks })
+          .select({ token: tokens, source: sourcePunks, claim: slopClaims })
           .from(tokens)
           .leftJoin(sourcePunks, eq(sourcePunks.sourceId, tokens.sourceId))
+          .leftJoin(slopClaims, eq(slopClaims.tokenId, tokens.tokenId))
           .where(inArray(tokens.tokenId, ids)),
       ]);
 
@@ -60,7 +64,7 @@ tokens_route.get("/", async (c) => {
       const missingIds = [];
       for (const id of ids) {
         const row = byId.get(id);
-        const snap = buildTokenSnapshot(row?.token ?? null, row?.source ?? null, collection);
+        const snap = buildTokenSnapshot(row?.token ?? null, row?.source ?? null, collection, row?.claim ?? null);
         if (snap) items.push(snap);
         else missingIds.push(id);
       }
@@ -140,6 +144,8 @@ tokens_route.get("/", async (c) => {
     slopLevel: tokens.slopLevel,
     punkType: sourcePunks.punkType,
     attributesText: sourcePunks.attributesText,
+    claimStatus: slopClaims.status,
+    claimRecipient: slopClaims.recipient,
     ...(includePixels
       ? {
           generatedPixels: tokens.generatedPixels,
@@ -154,6 +160,7 @@ tokens_route.get("/", async (c) => {
       .select(selectFields)
       .from(tokens)
       .leftJoin(sourcePunks, eq(sourcePunks.sourceId, tokens.sourceId))
+      .leftJoin(slopClaims, eq(slopClaims.tokenId, tokens.tokenId))
       .where(
         and(
           ...conditions,

@@ -127,9 +127,12 @@ Returned by `GET /tokens/:id`, `GET /tokens?ids=...`, listing token embeds, and 
 type TokenSnapshot = {
   chainId: 1;
   tokenId: string;
-  status: "active" | "burned";
+  status: "active" | "burned" | "locked" | "voided";
   exists: boolean;
   owner: string | null;
+  claimStatus: "pending" | "unlocked" | "claimed" | "voided" | null;
+  claimRecipient: string | null;
+  lockedOn: string | null;
   revealed: boolean;
   baseSourceId: number | null;
   sourceId: number | null;
@@ -151,7 +154,7 @@ Returned by `GET /tokens` and `GET /owners/:address/tokens`.
 ```ts
 type TokenListItem = {
   tokenId: number;
-  status: "active" | "burned";
+  status: "active" | "burned" | "locked" | "voided";
   owner?: string | null;
   sourceId: number | null;
   baseSourceId: number | null;
@@ -162,10 +165,16 @@ type TokenListItem = {
   attributesText: string | null;
   generatedPixels?: `0x${string}` | null;
   originalRgba?: `0x${string}` | null;
+  claimStatus?: "pending" | "unlocked" | "claimed" | "voided" | null;
+  claimRecipient?: string | null;
+  lockedOn?: string | null;
 };
 ```
 
 Add `include=pixels` to include `generatedPixels` and `originalRgba`.
+Claim-custodied Slonks report `status: "locked"` while their SLOP claim is
+pending and `status: "voided"` after the claim/void is complete, even though the
+ERC721 may still be owned by a game contract.
 
 ## API Reference
 
@@ -210,7 +219,8 @@ Returns:
 
 Full token snapshot. Burned tokens return `200` with `status: "burned"`,
 `exists: false`, `owner: null`, and their revealed source-backed visual data
-when available.
+when available. Claim-custodied tokens return `status: "locked"` or
+`status: "voided"` based on their indexed SLOP claim state.
 
 Example:
 
@@ -316,9 +326,11 @@ Returns:
 
 type MergeTreeNode = {
   tokenId: number;
-  status: "active" | "burned";
+  status: "active" | "burned" | "locked" | "voided";
   exists: boolean;
   owner: string | null;
+  claimStatus: "pending" | "unlocked" | "claimed" | "voided" | null;
+  claimRecipient: string | null;
   sourceId: number | null;
   baseSourceId: number | null;
   punkType: string | null;

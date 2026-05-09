@@ -57,6 +57,9 @@ describe("buildTokenSnapshot", () => {
       status: "active",
       exists: true,
       owner: "0x2052051A0474fB0B98283b3F38C13b0B0B6a3677",
+      claimStatus: null,
+      claimRecipient: null,
+      lockedOn: null,
       revealed: true,
       baseSourceId: 10,
       sourceId: 20,
@@ -68,6 +71,24 @@ describe("buildTokenSnapshot", () => {
       originalRgba: "0x0102",
       slop: 55,
       slopLevel: 1,
+    });
+  });
+
+  test("marks claim-custodied tokens as locked or voided", () => {
+    expect(buildTokenSnapshot(token, source, collection, { status: "pending", recipient: token.owner })).toMatchObject({
+      status: "locked",
+      claimStatus: "pending",
+      claimRecipient: "0x2052051A0474fB0B98283b3F38C13b0B0B6a3677",
+      lockedOn: "0x2052051A0474fB0B98283b3F38C13b0B0B6a3677",
+    });
+    expect(buildTokenSnapshot(token, source, collection, { status: "claimed", recipient: token.owner })).toMatchObject({
+      status: "voided",
+      claimStatus: "claimed",
+    });
+    expect(buildTokenSnapshot(token, source, collection, { status: "unlocked", recipient: token.owner })).toMatchObject({
+      status: "active",
+      claimStatus: "unlocked",
+      lockedOn: null,
     });
   });
 

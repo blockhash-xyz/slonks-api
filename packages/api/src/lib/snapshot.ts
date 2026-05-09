@@ -2,15 +2,21 @@ import type { Address, Hex } from "viem";
 import { getAddress } from "viem";
 import type { Attribute } from "@blockhash/slonks-core/attributes";
 import { bytesToHex } from "@blockhash/slonks-core/hex";
-import type { CollectionStateRow, SourcePunkRow, TokenRow } from "../db/schema.ts";
+import type { CollectionStateRow, SlopClaimRow, SourcePunkRow, TokenRow } from "../db/schema.ts";
+
+export type TokenStatus = "active" | "burned" | "locked" | "voided";
+export type TokenClaimInfo = Pick<SlopClaimRow, "status" | "recipient"> | null;
 
 // Mirrors slonks-web's TokenSnapshot so the API is a drop-in replacement.
 export type TokenSnapshot = {
   chainId: 1;
   tokenId: string;
-  status: "active" | "burned";
+  status: TokenStatus;
   exists: boolean;
   owner: Address | null;
+  claimStatus: string | null;
+  claimRecipient: Address | null;
+  lockedOn: Address | null;
   revealed: boolean;
   baseSourceId: number | null;
   sourceId: number | null;
@@ -41,13 +47,17 @@ export function buildTokenSnapshot(
   token: TokenRow | null,
   source: SourcePunkRow | null,
   collection: CollectionStateRow,
+  claim: TokenClaimInfo = null,
 ): TokenSnapshot | null {
   if (!token) return null;
 
   const revealed = collection.revealed;
   const exists = token.exists;
-  const status = exists ? "active" : "burned";
+  const claimStatus = claim?.status ?? null;
+  const status = tokenStatus(exists, claimStatus);
   const owner = token.owner ? toChecksum(token.owner) : null;
+  const claimRecipient = claim?.recipient ? toChecksum(claim.recipient) : null;
+  const lockedOn = owner && isCustodiedClaimStatus(claimStatus) ? owner : null;
 
   const generatedBytes = token.generatedPixels ?? source?.generatedPixels ?? null;
   const originalBytes = source?.originalRgba ?? null;
@@ -63,6 +73,9 @@ export function buildTokenSnapshot(
     status,
     exists,
     owner,
+    claimStatus,
+    claimRecipient,
+    lockedOn,
     revealed,
     baseSourceId: token.baseSourceId ?? null,
     sourceId: showSource ? token.sourceId : null,
@@ -75,6 +88,17 @@ export function buildTokenSnapshot(
     slop: showSource ? slop : null,
     slopLevel: showSource ? slopLevel : null,
   };
+}
+
+export function tokenStatus(exists: boolean | null | undefined, claimStatus?: string | null): TokenStatus {
+  if (!exists) return "burned";
+  if (claimStatus === "pending") return "locked";
+  if (claimStatus === "claimed" || claimStatus === "voided") return "voided";
+  return "active";
+}
+
+export function isCustodiedClaimStatus(claimStatus?: string | null): boolean {
+  return claimStatus === "pending" || claimStatus === "claimed" || claimStatus === "voided";
 }
 
 export function buildCollectionStatus(row: CollectionStateRow): CollectionStatusDto {
