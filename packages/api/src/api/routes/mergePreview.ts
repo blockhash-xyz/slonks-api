@@ -1,6 +1,6 @@
-import { Hono } from "hono";
+import { Hono, type Context } from "hono";
 import { CACHE, setCache } from "../cache.ts";
-import { computeMergePreviews } from "../mergePreviewCore.ts";
+import { computeMergePreviewsControlled, MergePreviewBusyError } from "../mergePreviewCore.ts";
 
 export const mergePreview = new Hono();
 
@@ -16,7 +16,9 @@ mergePreview.post("/", async (c) => {
   const donorTokenId = parseTokenId(readBodyNumber(body, "donorTokenId", "burnedTokenId", "burnTokenId"), "donorTokenId");
   if (typeof donorTokenId === "string") return c.json({ error: donorTokenId }, 400);
 
-  const { items, errors } = await computeMergePreviews([{ survivorTokenId, donorTokenId }]);
+  const result = await runPreview(() => computeMergePreviewsControlled([{ survivorTokenId, donorTokenId }]), c);
+  if (result instanceof Response) return result;
+  const { items, errors } = result;
   if (errors[0]) {
     const { status, ...errorBody } = errors[0];
     return c.json(errorBody, status as 400 | 404 | 409);
@@ -25,6 +27,18 @@ mergePreview.post("/", async (c) => {
   setCache(c, CACHE.preview);
   return c.json(items[0]);
 });
+
+async function runPreview<T>(fn: () => Promise<T>, c: Context): Promise<T | Response> {
+  try {
+    return await fn();
+  } catch (err) {
+    if (err instanceof MergePreviewBusyError) {
+      c.header("Retry-After", String(err.retryAfter));
+      return c.json({ error: err.message, retryAfter: err.retryAfter }, 429);
+    }
+    throw err;
+  }
+}
 
 function readBodyNumber(body: object, ...keys: string[]): unknown {
   const record = body as Record<string, unknown>;

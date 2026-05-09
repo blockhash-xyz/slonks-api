@@ -31,4 +31,74 @@ export async function computeMergePreviews(
 
   return { items, errors };
 }
+
+const MAX_ACTIVE_PREVIEW_JOBS = 1;
+const MAX_CACHED_PREVIEW_PAIRS = 25;
+const MAX_PREVIEW_CACHE_ENTRIES = 250;
+const PREVIEW_CACHE_TTL_MS = 30_000;
+
+type MergePreviewResult = Awaited<ReturnType<typeof computeMergePreviews>>;
+type PreviewCacheEntry = {
+  expiresAt: number;
+  value: MergePreviewResult;
+};
+
+const completedPreviewJobs = new Map<string, PreviewCacheEntry>();
+const pendingPreviewJobs = new Map<string, Promise<MergePreviewResult>>();
+let activePreviewJobs = 0;
+
+export class MergePreviewBusyError extends Error {
+  retryAfter = 1;
+
+  constructor() {
+    super("merge preview is busy; retry shortly");
+  }
+}
+
+export async function computeMergePreviewsControlled(pairs: MergePreviewPair[]): Promise<MergePreviewResult> {
+  const key = previewKey(pairs);
+  const now = Date.now();
+  const cached = completedPreviewJobs.get(key);
+  if (cached && cached.expiresAt > now) {
+    completedPreviewJobs.delete(key);
+    completedPreviewJobs.set(key, cached);
+    return cached.value;
+  }
+  if (cached) completedPreviewJobs.delete(key);
+
+  const pending = pendingPreviewJobs.get(key);
+  if (pending) return pending;
+
+  if (activePreviewJobs >= MAX_ACTIVE_PREVIEW_JOBS) {
+    throw new MergePreviewBusyError();
+  }
+
+  activePreviewJobs += 1;
+  const promise = computeMergePreviews(pairs);
+  pendingPreviewJobs.set(key, promise);
+
+  try {
+    const result = await promise;
+    if (pairs.length <= MAX_CACHED_PREVIEW_PAIRS) {
+      completedPreviewJobs.set(key, { value: result, expiresAt: now + PREVIEW_CACHE_TTL_MS });
+      evictPreviewCache();
+    }
+    return result;
+  } finally {
+    activePreviewJobs -= 1;
+    pendingPreviewJobs.delete(key);
+  }
+}
+
+function previewKey(pairs: MergePreviewPair[]): string {
+  return JSON.stringify(pairs);
+}
+
+function evictPreviewCache(): void {
+  for (const key of completedPreviewJobs.keys()) {
+    if (completedPreviewJobs.size <= MAX_PREVIEW_CACHE_ENTRIES) break;
+    completedPreviewJobs.delete(key);
+  }
+}
+
 export type { MergePreviewError, MergePreviewItem, MergePreviewPair };

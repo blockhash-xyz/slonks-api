@@ -1,6 +1,10 @@
-import { Hono } from "hono";
+import { Hono, type Context } from "hono";
 import { CACHE, setCache } from "../cache.ts";
-import { computeMergePreviews, type MergePreviewPair } from "../mergePreviewCore.ts";
+import {
+  computeMergePreviewsControlled,
+  MergePreviewBusyError,
+  type MergePreviewPair,
+} from "../mergePreviewCore.ts";
 
 export const mergePreviews = new Hono();
 
@@ -22,10 +26,24 @@ mergePreviews.post("/", async (c) => {
     pairs.push(pair);
   }
 
-  const { items, errors } = await computeMergePreviews(pairs);
+  const result = await runPreview(() => computeMergePreviewsControlled(pairs), c);
+  if (result instanceof Response) return result;
+  const { items, errors } = result;
   setCache(c, CACHE.preview);
   return c.json({ chainId: 1, items, errors, count: items.length, errorCount: errors.length });
 });
+
+async function runPreview<T>(fn: () => Promise<T>, c: Context): Promise<T | Response> {
+  try {
+    return await fn();
+  } catch (err) {
+    if (err instanceof MergePreviewBusyError) {
+      c.header("Retry-After", String(err.retryAfter));
+      return c.json({ error: err.message, retryAfter: err.retryAfter }, 429);
+    }
+    throw err;
+  }
+}
 
 function parsePair(raw: unknown, index: number): MergePreviewPair | string {
   if (!raw || typeof raw !== "object") return `pairs[${index}] must be an object`;
