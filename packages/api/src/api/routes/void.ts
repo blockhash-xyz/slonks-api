@@ -9,8 +9,10 @@ import { includeParam, tokenListDto } from "../dto.ts";
 
 export const voidRoutes = new Hono();
 const ACTIVE_GAME_OWNER = CONTRACTS.slopGame.toLowerCase();
-const OLD_GAME_OWNER = CONTRACTS.oldSlopGame.toLowerCase();
-const LOCKING_CONTRACTS = [ACTIVE_GAME_OWNER, OLD_GAME_OWNER];
+const LOCKING_CONTRACTS = [
+  ACTIVE_GAME_OWNER,
+  ...CONTRACTS.legacySlopGames.map((address) => address.toLowerCase()),
+];
 
 // Slonks locked in a SLOP game with an unclaimed SLOP claim.
 voidRoutes.get("/pending-claims", async (c) => {
@@ -94,6 +96,8 @@ voidRoutes.get("/pending-claims", async (c) => {
     contracts: {
       activeGame: getAddress(CONTRACTS.slopGame),
       previousGame: getAddress(CONTRACTS.oldSlopGame),
+      falseStartGame: getAddress(CONTRACTS.falseStartSlopGame),
+      legacyGames: CONTRACTS.legacySlopGames.map((address) => getAddress(address)),
     },
     owner: owner ? getAddress(owner) : undefined,
     count: countRow[0]?.count ?? 0,

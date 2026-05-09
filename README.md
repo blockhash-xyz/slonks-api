@@ -29,9 +29,10 @@ https://api.slonks.xyz
 - `SlonksImageModel`: `0xca116243a2013ed33015c776ee37310b199ee80c`
 - `SlonksMergeManager`: `0x7bda4820dbcfe471a2e23d3fa069c1cd261401e1`
 - `SLOP`: `0x999b49c0d1612e619a4a4f6280733184da025108`
-- `SlopGameV2`: `0x886612a7a8dba8bbced8f86d26c1114857ccd9da`
+- `SlopGameV2`: `0x76c61b6140600429f50de5ac987e41672047cc28`
 - `Previous SlopGame`: `0xb4ffbcce990a9a0b5f84722ba2d5db4e7bfc9d11`
-- `SlopDutchAuctionExtension`: `0xfeff27e2b255e8656e083bcda6bfae5984913dfd`
+- `False-start SlopGameV2`: `0x886612a7a8dba8bbced8f86d26c1114857ccd9da`
+- `SlopDutchAuctionExtension`: `0xf79822c2331db455087b51b6c97e4064138bb635`
 - `HonkVerifier`: `0x5cbe9cbedc27dd4f082119586f5d924645064eb3`
 - `CryptoPunksData`: `0x16f5a35647d6f03d5d3da7b35409d65ba03af3b2`
 

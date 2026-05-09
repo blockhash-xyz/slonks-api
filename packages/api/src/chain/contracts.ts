@@ -9,12 +9,17 @@ export const CONTRACTS = {
   imageModel: "0xca116243a2013ed33015c776ee37310b199ee80c" as Address,
   mergeManager: "0x7bda4820dbcfe471a2e23d3fa069c1cd261401e1" as Address,
   legacyMergeManagers: ["0x3e5bb2a724dbe9a6afe04ae7581639367693f51c" as Address],
-  slopGame: "0x886612a7a8dba8bbced8f86d26c1114857ccd9da" as Address,
+  slopGame: "0x76c61b6140600429f50de5ac987e41672047cc28" as Address,
   oldSlopGame: "0xb4ffbcce990a9a0b5f84722ba2d5db4e7bfc9d11" as Address,
+  falseStartSlopGame: "0x886612a7a8dba8bbced8f86d26c1114857ccd9da" as Address,
+  legacySlopGames: [
+    "0xb4ffbcce990a9a0b5f84722ba2d5db4e7bfc9d11" as Address,
+    "0x886612a7a8dba8bbced8f86d26c1114857ccd9da" as Address,
+  ],
   slopToken: "0x999b49c0d1612e619a4a4f6280733184da025108" as Address,
   honkVerifier: "0x5cbe9cbedc27dd4f082119586f5d924645064eb3" as Address,
-  dutchAuctionExtension: "0xfeff27e2b255e8656e083bcda6bfae5984913dfd" as Address,
-  oldGameSweepExtension: "0x7663f7e1495d8c2894438c695f60327bf9f55697" as Address,
+  dutchAuctionExtension: "0xf79822c2331db455087b51b6c97e4064138bb635" as Address,
+  oldGameSweepExtension: "0xabfe4e6dbcbf1468e6e50c2c2223a91eb8c43b18" as Address,
   cryptoPunksData: "0x16f5a35647d6f03d5d3da7b35409d65ba03af3b2" as Address,
 } as const;
 

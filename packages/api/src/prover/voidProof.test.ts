@@ -12,7 +12,7 @@ const request: ResolvedVoidProofRequest = {
     renderer: "0x5e68c484ef6dba6e6f27243e6c668674065c1066",
     imageModel: "0xca116243a2013ed33015c776ee37310b199ee80c",
     mergeManager: "0x7bda4820dbcfe471a2e23d3fa069c1cd261401e1",
-    activeState: "0x886612a7a8dba8bbced8f86d26c1114857ccd9da",
+    activeState: "0x76c61b6140600429f50de5ac987e41672047cc28",
   },
 };
 
@@ -26,7 +26,7 @@ describe("resolvedProofCacheKey", () => {
           renderer: "0x5e68c484ef6Dba6e6f27243e6c668674065c1066",
           imageModel: "0xCa116243a2013ED33015c776ee37310b199Ee80c",
           mergeManager: "0x7bDa4820DbcFE471a2e23D3fA069C1CD261401e1",
-          activeState: "0x886612a7a8dbA8bBceD8f86D26c1114857ccd9DA",
+          activeState: "0x76C61B6140600429F50De5aC987E41672047cc28",
         },
       }),
     );
