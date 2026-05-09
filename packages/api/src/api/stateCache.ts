@@ -102,10 +102,17 @@ async function connectRedis(): Promise<RedisClient | null> {
   try {
     client = createClient({
       url: env.REDIS_URL,
-      socket: { connectTimeout: env.API_CACHE_REDIS_CONNECT_TIMEOUT_MS },
+      socket: {
+        connectTimeout: env.API_CACHE_REDIS_CONNECT_TIMEOUT_MS,
+        reconnectStrategy: false,
+      },
     });
     client.on("error", (err) => {
       console.warn("redis cache error:", err);
+      redisPromise = null;
+    });
+    client.on("end", () => {
+      redisPromise = null;
     });
     await withTimeout(client.connect(), env.API_CACHE_REDIS_CONNECT_TIMEOUT_MS);
     return client;
@@ -129,9 +136,10 @@ function versionKey(scope: string): string {
 
 async function safeRedis<T>(fn: () => Promise<T>): Promise<T | null> {
   try {
-    return await withTimeout(fn(), env.API_CACHE_REDIS_COMMAND_TIMEOUT_MS, null);
+    return await withTimeout(fn(), env.API_CACHE_REDIS_COMMAND_TIMEOUT_MS);
   } catch (err) {
     console.warn("redis cache command failed:", err);
+    redisPromise = null;
     return null;
   }
 }
