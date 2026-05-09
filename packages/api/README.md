@@ -27,7 +27,10 @@ https://api.slonks.xyz
 - `SlonksRenderer`: `0x5e68c484ef6dba6e6f27243e6c668674065c1066`
 - `SlonksImageModel`: `0xca116243a2013ed33015c776ee37310b199ee80c`
 - `SlonksMergeManager`: `0x7bda4820dbcfe471a2e23d3fa069c1cd261401e1`
-- `SlopGame`: `0xb4ffbcce990a9a0b5f84722ba2d5db4e7bfc9d11`
+- `SLOP`: `0x999b49c0d1612e619a4a4f6280733184da025108`
+- `SlopGameV2`: `0x886612a7a8dba8bbced8f86d26c1114857ccd9da`
+- `SlopDutchAuctionExtension`: `0xfeff27e2b255e8656e083bcda6bfae5984913dfd`
+- `HonkVerifier`: `0x5cbe9cbedc27dd4f082119586f5d924645064eb3`
 - `CryptoPunksData`: `0x16f5a35647d6f03d5d3da7b35409d65ba03af3b2`
 
 ## What It Indexes
@@ -36,7 +39,7 @@ https://api.slonks.xyz
 - `Slonks` `RevealCommitted` and `Revealed`: collection phase and `shuffleOffset`.
 - `Slonks` `BatchMetadataUpdate` / `MetadataUpdate`: cache invalidation hints.
 - Active and legacy `SlonksMergeManager` `SlonkMerged`: donor-to-survivor merge edges, resulting merge level, and cumulative embedding.
-- Active `SlopGame` claim events: Slonks locked for SLOP, unlocked, claimed,
+- Active `SlopGameV2` claim events: Slonks locked for SLOP, unlocked, claimed,
   protocol-voided, and bought-and-voided.
 
 ## What It Precomputes
@@ -452,7 +455,7 @@ Returns:
 
 ### `GET /void/pending-claims`
 
-Slonks currently locked in the active SlopGame with a pending SLOP claim. These
+Slonks currently locked in the active SlopGameV2 with a pending SLOP claim. These
 tokens are owned by the game contract onchain, but `claimRecipient` is the
 address that locked the Slonk and will receive the SLOP when claimed.
 
@@ -628,11 +631,10 @@ The API reads current chain state, automatically chooses the active revival
 embedding, merge embedding, or source embedding, writes the Noir prover inputs,
 runs `nargo execute`, and runs Barretenberg `bb prove`.
 
-When the indexer sees the active SlopGame emit `SlonkLockedForSlop`, it queues
-the matching proof. A dedicated proof-worker process drains queued jobs and
-stores completed proofs. The public endpoint checks that durable cache first;
-uncached requests return `202` by default instead of holding the HTTP request
-open for a full proof.
+The public endpoint checks the durable proof cache first. Uncached requests are
+queued on demand and return `202` by default instead of holding the HTTP request
+open for a full proof. A dedicated proof-worker process drains queued jobs and
+stores completed proofs.
 
 Body:
 

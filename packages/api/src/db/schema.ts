@@ -93,7 +93,7 @@ export const transfers = pgTable(
   }),
 );
 
-// Current SlopGame claim lifecycle per token. Pending rows are Slonks locked in
+// Current SLOP game claim lifecycle per token. Pending rows are Slonks locked in
 // the active game contract that still need/await a SLOP claim.
 export const slopClaims = pgTable(
   "slop_claims",

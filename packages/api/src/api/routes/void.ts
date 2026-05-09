@@ -8,7 +8,7 @@ import { includeParam, tokenListDto } from "../dto.ts";
 
 export const voidRoutes = new Hono();
 
-// Slonks locked in SlopGame with an unclaimed SLOP claim.
+// Slonks locked in the active SLOP game with an unclaimed SLOP claim.
 voidRoutes.get("/pending-claims", async (c) => {
   const sp = c.req.query();
   const page = Number(sp.page ?? 1);
