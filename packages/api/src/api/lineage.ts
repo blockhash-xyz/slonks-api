@@ -10,6 +10,7 @@ import {
   type SourcePunkRow,
   type TokenRow,
 } from "../db/schema.ts";
+import { isKnownSlopGameAddress } from "../chain/contracts.ts";
 import { tokenStatus, type TokenStatus } from "../lib/snapshot.ts";
 import { blendEmbeddings } from "@blockhash/slonks-core/blend";
 import { diffPixels } from "@blockhash/slonks-core/diff";
@@ -188,7 +189,7 @@ function buildNode(tokenId: number, cutoffOrder: number, context: BuildContext, 
   stack.delete(tokenId);
   return {
     tokenId,
-    status: tokenStatus(token?.exists, claim?.status),
+    status: tokenStatus(token?.exists, claim?.status, isKnownSlopGameAddress(token?.owner)),
     exists: token?.exists ?? false,
     owner: token?.owner ?? null,
     claimStatus: claim?.status ?? null,

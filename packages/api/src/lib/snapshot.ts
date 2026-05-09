@@ -2,6 +2,7 @@ import type { Address, Hex } from "viem";
 import { getAddress } from "viem";
 import type { Attribute } from "@blockhash/slonks-core/attributes";
 import { bytesToHex } from "@blockhash/slonks-core/hex";
+import { isKnownSlopGameAddress } from "../chain/contracts.ts";
 import type { CollectionStateRow, SlopClaimRow, SourcePunkRow, TokenRow } from "../db/schema.ts";
 
 export type TokenStatus = "active" | "burned" | "locked" | "voided";
@@ -54,10 +55,11 @@ export function buildTokenSnapshot(
   const revealed = collection.revealed;
   const exists = token.exists;
   const claimStatus = claim?.status ?? null;
-  const status = tokenStatus(exists, claimStatus);
   const owner = token.owner ? toChecksum(token.owner) : null;
+  const isClaimCustodied = isKnownSlopGameAddress(owner);
+  const status = tokenStatus(exists, claimStatus, isClaimCustodied);
   const claimRecipient = claim?.recipient ? toChecksum(claim.recipient) : null;
-  const lockedOn = owner && isCustodiedClaimStatus(claimStatus) ? owner : null;
+  const lockedOn = owner && isClaimCustodied && isCustodiedClaimStatus(claimStatus) ? owner : null;
 
   const generatedBytes = token.generatedPixels ?? source?.generatedPixels ?? null;
   const originalBytes = source?.originalRgba ?? null;
@@ -90,8 +92,13 @@ export function buildTokenSnapshot(
   };
 }
 
-export function tokenStatus(exists: boolean | null | undefined, claimStatus?: string | null): TokenStatus {
+export function tokenStatus(
+  exists: boolean | null | undefined,
+  claimStatus?: string | null,
+  isClaimCustodied = false,
+): TokenStatus {
   if (!exists) return "burned";
+  if (!isClaimCustodied) return "active";
   if (claimStatus === "pending") return "locked";
   if (claimStatus === "claimed" || claimStatus === "voided") return "voided";
   return "active";

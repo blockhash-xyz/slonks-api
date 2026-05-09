@@ -15,7 +15,12 @@ import {
   slopGameAbi,
   slonksMergeManagerAbi,
 } from "../chain/abis.ts";
-import { CONTRACTS, MAX_SUPPLY, SLONKS_DEPLOY_BLOCK } from "../chain/contracts.ts";
+import {
+  CONTRACTS,
+  MAX_SUPPLY,
+  SLONKS_DEPLOY_BLOCK,
+  isKnownSlopGameAddress,
+} from "../chain/contracts.ts";
 import { publicClient } from "../chain/client.ts";
 import { env } from "../env.ts";
 import { db } from "../db/client.ts";
@@ -32,10 +37,6 @@ import {
 } from "./handlers.ts";
 
 const ZERO_ADDR = "0x0000000000000000000000000000000000000000";
-const KNOWN_SLOP_GAME_ADDRESSES = new Set(
-  [CONTRACTS.slopGame, ...CONTRACTS.legacySlopGames].map((address) => address.toLowerCase()),
-);
-
 export async function syncOnce(): Promise<void> {
   const client = publicClient();
 
@@ -535,10 +536,6 @@ async function processSlopGameLogs(
     }
   }
   return changed;
-}
-
-function isKnownSlopGameAddress(address: string): boolean {
-  return KNOWN_SLOP_GAME_ADDRESSES.has(address.toLowerCase());
 }
 
 function shouldProcessGameEvent(blockNumber: bigint, afterBlock: bigint | undefined): boolean {

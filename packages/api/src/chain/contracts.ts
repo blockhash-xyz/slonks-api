@@ -25,6 +25,13 @@ export const CONTRACTS = {
 
 export const CHAIN = mainnet;
 export const CHAIN_ID = 1;
+export const SLOP_GAME_ADDRESSES = [CONTRACTS.slopGame, ...CONTRACTS.legacySlopGames] as const;
+
+export function isKnownSlopGameAddress(address: string | null | undefined): boolean {
+  if (!address) return false;
+  const lower = address.toLowerCase();
+  return SLOP_GAME_ADDRESSES.some((gameAddress) => gameAddress.toLowerCase() === lower);
+}
 
 // Deployment block of the Slonks contract. Override with START_BLOCK env var if needed.
 // If you don't know it offhand, set START_BLOCK in .env to the block of the first

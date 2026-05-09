@@ -1,6 +1,8 @@
 import { describe, expect, test } from "bun:test";
 import { buildCollectionStatus, buildTokenSnapshot } from "./snapshot.ts";
 
+const activeGame = "0x76c61b6140600429f50de5ac987e41672047cc28";
+
 const collection = {
   id: 1,
   totalSupply: 10,
@@ -75,19 +77,28 @@ describe("buildTokenSnapshot", () => {
   });
 
   test("marks claim-custodied tokens as locked or voided", () => {
-    expect(buildTokenSnapshot(token, source, collection, { status: "pending", recipient: token.owner })).toMatchObject({
+    const gameToken = { ...token, owner: activeGame };
+    expect(buildTokenSnapshot(gameToken, source, collection, { status: "pending", recipient: token.owner })).toMatchObject({
       status: "locked",
       claimStatus: "pending",
       claimRecipient: "0x2052051A0474fB0B98283b3F38C13b0B0B6a3677",
-      lockedOn: "0x2052051A0474fB0B98283b3F38C13b0B0B6a3677",
+      lockedOn: "0x76C61B6140600429F50De5aC987E41672047cc28",
     });
-    expect(buildTokenSnapshot(token, source, collection, { status: "claimed", recipient: token.owner })).toMatchObject({
+    expect(buildTokenSnapshot(gameToken, source, collection, { status: "claimed", recipient: token.owner })).toMatchObject({
       status: "voided",
       claimStatus: "claimed",
     });
     expect(buildTokenSnapshot(token, source, collection, { status: "unlocked", recipient: token.owner })).toMatchObject({
       status: "active",
       claimStatus: "unlocked",
+      lockedOn: null,
+    });
+  });
+
+  test("keeps historical claim rows active once a token leaves game custody", () => {
+    expect(buildTokenSnapshot(token, source, collection, { status: "claimed", recipient: token.owner })).toMatchObject({
+      status: "active",
+      claimStatus: "claimed",
       lockedOn: null,
     });
   });

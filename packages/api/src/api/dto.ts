@@ -1,4 +1,5 @@
 import { bytesToHex } from "@blockhash/slonks-core/hex";
+import { isKnownSlopGameAddress } from "../chain/contracts.ts";
 import type { MergeRow, TransferRow } from "../db/schema.ts";
 import { isCustodiedClaimStatus, tokenStatus } from "../lib/snapshot.ts";
 
@@ -25,12 +26,13 @@ export function tokenListDto(row: TokenListRow, includePixels: boolean) {
     tokenId: row.tokenId,
   };
 
-  if ("exists" in row) item.status = tokenStatus(row.exists, row.claimStatus);
+  const isClaimCustodied = isKnownSlopGameAddress(row.owner);
+  if ("exists" in row) item.status = tokenStatus(row.exists, row.claimStatus, isClaimCustodied);
   if ("owner" in row) item.owner = row.owner;
   if ("claimStatus" in row) {
     item.claimStatus = row.claimStatus ?? null;
     item.claimRecipient = row.claimRecipient ?? null;
-    item.lockedOn = row.owner && isCustodiedClaimStatus(row.claimStatus) ? row.owner : null;
+    item.lockedOn = row.owner && isClaimCustodied && isCustodiedClaimStatus(row.claimStatus) ? row.owner : null;
   }
 
   Object.assign(item, {

@@ -1,6 +1,8 @@
 import { describe, expect, test } from "bun:test";
 import { includeParam, mergeDto, tokenListDto, transferDto } from "./dto.ts";
 
+const activeGame = "0x76c61b6140600429f50de5ac987e41672047cc28";
+
 describe("API DTO helpers", () => {
   test("builds lightweight token list rows", () => {
     expect(
@@ -83,7 +85,7 @@ describe("API DTO helpers", () => {
         {
           tokenId: 10,
           exists: true,
-          owner: "0xgame",
+          owner: activeGame,
           sourceId: 1,
           baseSourceId: 2,
           mergeLevel: 0,
@@ -100,7 +102,31 @@ describe("API DTO helpers", () => {
       status: "voided",
       claimStatus: "claimed",
       claimRecipient: "0xowner",
-      lockedOn: "0xgame",
+      lockedOn: activeGame,
+    });
+
+    expect(
+      tokenListDto(
+        {
+          tokenId: 11,
+          exists: true,
+          owner: "0xowner",
+          sourceId: 1,
+          baseSourceId: 2,
+          mergeLevel: 0,
+          slop: 10,
+          slopLevel: 0,
+          punkType: "Male",
+          attributesText: "Male",
+          claimStatus: "claimed",
+          claimRecipient: "0xowner",
+        },
+        false,
+      ),
+    ).toMatchObject({
+      status: "active",
+      claimStatus: "claimed",
+      lockedOn: null,
     });
   });
 
