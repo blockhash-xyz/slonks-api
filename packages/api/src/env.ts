@@ -5,6 +5,8 @@ const schema = z.object({
   REDIS_URL: z.string().url().optional(),
   API_CACHE_TTL_MS: z.coerce.number().int().nonnegative().default(10 * 60_000),
   API_CACHE_NAMESPACE: z.string().default("slonks-api"),
+  API_CACHE_REDIS_CONNECT_TIMEOUT_MS: z.coerce.number().int().positive().default(500),
+  API_CACHE_REDIS_COMMAND_TIMEOUT_MS: z.coerce.number().int().positive().default(500),
   ALCHEMY_API_KEY: z.string().optional(),
   RPC_URL: z.string().url().optional(),
   OPENSEA_API_KEY: z.string().optional(),

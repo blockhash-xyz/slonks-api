@@ -92,21 +92,28 @@ async function readCacheVersion(redis: RedisClient, scope: string): Promise<stri
 async function getRedisClient(): Promise<RedisClient | null> {
   if (!env.REDIS_URL) return null;
   redisPromise ??= connectRedis();
-  const client = await redisPromise;
+  const client = await withTimeout(redisPromise, env.API_CACHE_REDIS_CONNECT_TIMEOUT_MS, null);
   if (!client) redisPromise = null;
   return client;
 }
 
 async function connectRedis(): Promise<RedisClient | null> {
+  let client: RedisClient | null = null;
   try {
-    const client = createClient({ url: env.REDIS_URL });
+    client = createClient({
+      url: env.REDIS_URL,
+      socket: { connectTimeout: env.API_CACHE_REDIS_CONNECT_TIMEOUT_MS },
+    });
     client.on("error", (err) => {
       console.warn("redis cache error:", err);
     });
-    await client.connect();
+    await withTimeout(client.connect(), env.API_CACHE_REDIS_CONNECT_TIMEOUT_MS);
     return client;
   } catch (err) {
     console.warn("redis cache unavailable:", err);
+    if (client) {
+      void client.disconnect().catch(() => undefined);
+    }
     return null;
   }
 }
@@ -122,10 +129,31 @@ function versionKey(scope: string): string {
 
 async function safeRedis<T>(fn: () => Promise<T>): Promise<T | null> {
   try {
-    return await fn();
+    return await withTimeout(fn(), env.API_CACHE_REDIS_COMMAND_TIMEOUT_MS, null);
   } catch (err) {
     console.warn("redis cache command failed:", err);
     return null;
+  }
+}
+
+async function withTimeout<T>(promise: Promise<T>, timeoutMs: number, fallback?: T): Promise<T> {
+  let timeout: ReturnType<typeof setTimeout> | null = null;
+  const hasFallback = arguments.length >= 3;
+  try {
+    return await Promise.race([
+      promise,
+      new Promise<T>((resolve, reject) => {
+        timeout = setTimeout(() => {
+          if (hasFallback) {
+            resolve(fallback as T);
+          } else {
+            reject(new Error(`Redis cache timed out after ${timeoutMs}ms`));
+          }
+        }, timeoutMs);
+      }),
+    ]);
+  } finally {
+    if (timeout) clearTimeout(timeout);
   }
 }
 

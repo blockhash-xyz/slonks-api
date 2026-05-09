@@ -787,6 +787,8 @@ files hit 100% line, function, and statement coverage.
 - `REDIS_URL`: optional Fly Redis URL used for shared API response caching.
 - `API_CACHE_TTL_MS`: optional Redis response cache TTL. Default `600000`.
 - `API_CACHE_NAMESPACE`: optional Redis key namespace. Default `slonks-api`.
+- `API_CACHE_REDIS_CONNECT_TIMEOUT_MS`: optional Redis connect timeout before bypassing cache. Default `500`.
+- `API_CACHE_REDIS_COMMAND_TIMEOUT_MS`: optional Redis command timeout before bypassing cache. Default `500`.
 - `ALCHEMY_API_KEY`: preferred mainnet RPC provider key.
 - `RPC_URL`: optional fallback RPC URL.
 - `OPENSEA_API_KEY`: optional; enables `/listings`.
