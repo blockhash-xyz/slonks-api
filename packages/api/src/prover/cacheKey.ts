@@ -1,6 +1,6 @@
 import { createHash } from "node:crypto";
 import { getAddress } from "viem";
-import { CHAIN_ID } from "../chain/contracts.ts";
+import { CHAIN_ID, CONTRACTS } from "../chain/contracts.ts";
 import type { ProofContracts, ProofInput, ResolvedVoidProofRequest } from "./voidProof.ts";
 
 export function resolvedProofCacheKey(request: ResolvedVoidProofRequest): string {
@@ -31,5 +31,6 @@ function canonicalProofContracts(contracts: ProofContracts): ProofContracts {
     imageModel: getAddress(contracts.imageModel),
     mergeManager: getAddress(contracts.mergeManager),
     activeState: contracts.activeState ? getAddress(contracts.activeState) : null,
+    claimContract: getAddress(contracts.claimContract ?? CONTRACTS.slopMergeLevelClaimExtension),
   };
 }

@@ -50,6 +50,7 @@ export type ProofContracts = {
   imageModel: Address;
   mergeManager: Address;
   activeState: Address | null;
+  claimContract?: Address;
 };
 
 export type ProofInput = {
@@ -139,6 +140,7 @@ function configuredProofContracts(): ProofContracts {
     imageModel: getAddress(CONTRACTS.imageModel),
     mergeManager: getAddress(CONTRACTS.mergeManager),
     activeState: getAddress(CONTRACTS.slopGame),
+    claimContract: getAddress(CONTRACTS.slopMergeLevelClaimExtension),
   };
 }
 

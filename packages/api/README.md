@@ -29,6 +29,7 @@ https://api.slonks.xyz
 - `SlonksMergeManager`: `0x7bda4820dbcfe471a2e23d3fa069c1cd261401e1`
 - `SLOP`: `0x999b49c0d1612e619a4a4f6280733184da025108`
 - `SlopGameV2`: `0x76c61b6140600429f50de5ac987e41672047cc28`
+- `SlopMergeLevelClaimExtension`: `0xe49eb1e77dfa92d00e3d0e2302524a066216ad63`
 - `Previous SlopGame`: `0xb4ffbcce990a9a0b5f84722ba2d5db4e7bfc9d11`
 - `False-start SlopGameV2`: `0x886612a7a8dba8bbced8f86d26c1114857ccd9da`
 - `SlopDutchAuctionExtension`: `0xf79822c2331db455087b51b6c97e4064138bb635`
@@ -41,8 +42,8 @@ https://api.slonks.xyz
 - `Slonks` `RevealCommitted` and `Revealed`: collection phase and `shuffleOffset`.
 - `Slonks` `BatchMetadataUpdate` / `MetadataUpdate`: cache invalidation hints.
 - Active and legacy `SlonksMergeManager` `SlonkMerged`: donor-to-survivor merge edges, resulting merge level, and cumulative embedding.
-- Active `SlopGameV2` claim events: Slonks locked for SLOP, unlocked, claimed,
-  protocol-voided, and bought-and-voided.
+- Active `SlopGameV2` and `SlopMergeLevelClaimExtension` claim events: Slonks
+  locked for SLOP, unlocked, claimed, protocol-voided, and bought-and-voided.
 
 ## What It Precomputes
 
@@ -480,9 +481,10 @@ Returns:
 ### `GET /void/pending-claims`
 
 Slonks currently locked in a SLOP game with a pending SLOP claim. `lockedOn` is
-the contract currently holding the Slonk. If it is `contracts.activeGame`, the
-token is pending a V2 SLOP claim. If it is in `contracts.legacyGames`, the token
-can be withdrawn from that old game contract with `unlockSlonk(tokenId)`.
+the contract currently holding the Slonk. New claims are locked through
+`contracts.claimExtension`, but custody is held by `contracts.activeGame`. If
+`lockedOn` is in `contracts.legacyGames`, the token can be withdrawn from that
+old game contract with `unlockSlonk(tokenId)`.
 
 Query params:
 
@@ -504,6 +506,8 @@ Returns:
   chainId: 1;
   contracts: {
     activeGame: string;
+    claimExtension: string;
+    claimContracts: string[];
     previousGame: string;
     falseStartGame: string;
     legacyGames: string[];
@@ -703,6 +707,7 @@ type VoidProof = {
     imageModel: string;
     mergeManager: string;
     activeState: string | null;
+    claimContract: string;
   };
   generatedAt: string;
 };

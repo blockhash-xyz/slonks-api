@@ -1,18 +1,14 @@
 import { Hono } from "hono";
 import { and, asc, desc, eq, inArray, sql, type SQL } from "drizzle-orm";
 import { getAddress, isAddress } from "viem";
-import { CONTRACTS } from "../../chain/contracts.ts";
+import { CONTRACTS, SLOP_CLAIM_CONTRACTS, SLOP_GAME_ADDRESSES } from "../../chain/contracts.ts";
 import { db } from "../../db/client.ts";
 import { slopClaims, sourcePunks, tokens } from "../../db/schema.ts";
 import { includeParam, tokenListDto } from "../dto.ts";
 import { readThroughStateCache } from "../stateCache.ts";
 
 export const voidRoutes = new Hono();
-const ACTIVE_GAME_OWNER = CONTRACTS.slopGame.toLowerCase();
-const LOCKING_CONTRACTS = [
-  ACTIVE_GAME_OWNER,
-  ...CONTRACTS.legacySlopGames.map((address) => address.toLowerCase()),
-];
+const LOCKING_CONTRACTS = SLOP_GAME_ADDRESSES.map((address) => address.toLowerCase());
 
 // Slonks locked in a SLOP game with an unclaimed SLOP claim.
 voidRoutes.get("/pending-claims", async (c) => {
@@ -96,6 +92,8 @@ voidRoutes.get("/pending-claims", async (c) => {
       chainId: 1,
       contracts: {
         activeGame: getAddress(CONTRACTS.slopGame),
+        claimExtension: getAddress(CONTRACTS.slopMergeLevelClaimExtension),
+        claimContracts: SLOP_CLAIM_CONTRACTS.map((address) => getAddress(address)),
         previousGame: getAddress(CONTRACTS.oldSlopGame),
         falseStartGame: getAddress(CONTRACTS.falseStartSlopGame),
         legacyGames: CONTRACTS.legacySlopGames.map((address) => getAddress(address)),

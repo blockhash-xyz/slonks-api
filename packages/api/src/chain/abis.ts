@@ -173,6 +173,20 @@ export const slopGameAbi = [
     outputs: [{ type: "bool" }],
   },
   {
+    type: "function",
+    name: "slopClaimRecipient",
+    stateMutability: "view",
+    inputs: [{ name: "tokenId", type: "uint256" }],
+    outputs: [{ type: "address" }],
+  },
+  {
+    type: "function",
+    name: "slopClaimed",
+    stateMutability: "view",
+    inputs: [{ name: "tokenId", type: "uint256" }],
+    outputs: [{ type: "bool" }],
+  },
+  {
     type: "event",
     name: "SlonkLockedForSlop",
     inputs: [
@@ -229,6 +243,20 @@ export const slopGameAbi = [
       { name: "submitter", type: "address", indexed: true },
       { name: "slop", type: "uint256", indexed: false },
       { name: "mintedAmount", type: "uint256", indexed: false },
+    ],
+    anonymous: false,
+  },
+  {
+    type: "event",
+    name: "ExtensionSlopClaimed",
+    inputs: [
+      { name: "tokenId", type: "uint256", indexed: true },
+      { name: "recipient", type: "address", indexed: true },
+      { name: "submitter", type: "address", indexed: true },
+      { name: "mergeLevel", type: "uint8", indexed: false },
+      { name: "slop", type: "uint256", indexed: false },
+      { name: "mintedAmount", type: "uint256", indexed: false },
+      { name: "wasLocked", type: "bool", indexed: false },
     ],
     anonymous: false,
   },

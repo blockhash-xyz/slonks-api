@@ -19,6 +19,7 @@ import {
   CONTRACTS,
   MAX_SUPPLY,
   SLONKS_DEPLOY_BLOCK,
+  SLOP_CLAIM_EVENT_ADDRESSES,
   isKnownSlopGameAddress,
 } from "../chain/contracts.ts";
 import { publicClient } from "../chain/client.ts";
@@ -228,7 +229,7 @@ async function syncSlopGameLogs(client: PublicClient, safeLatest: bigint): Promi
     .limit(1);
   if (!stateRow) return;
 
-  const gameAddresses = await readSlopGameAddresses(client);
+  const gameAddresses = await readSlopClaimEventAddresses(client);
   if (gameAddresses.length === 0) return;
 
   const startFrom = env.START_BLOCK ?? SLONKS_DEPLOY_BLOCK;
@@ -263,11 +264,11 @@ async function syncSlopGameLogs(client: PublicClient, safeLatest: bigint): Promi
   }
 }
 
-async function readSlopGameAddresses(client: PublicClient): Promise<Address[]> {
+async function readSlopClaimEventAddresses(client: PublicClient): Promise<Address[]> {
   const addresses = new Map<string, Address>();
   const active = await readActiveSlopGameAddress(client);
 
-  for (const address of [CONTRACTS.slopGame, active, ...CONTRACTS.legacySlopGames]) {
+  for (const address of [...SLOP_CLAIM_EVENT_ADDRESSES, active]) {
     if (!address || address === zeroAddress) continue;
     const checksumAddress = getAddress(address);
     addresses.set(checksumAddress.toLowerCase(), checksumAddress);

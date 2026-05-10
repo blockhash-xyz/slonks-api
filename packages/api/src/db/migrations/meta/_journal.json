@@ -43,6 +43,13 @@
       "when": 1778180400000,
       "tag": "0005_slop_claims",
       "breakpoints": true
+    },
+    {
+      "idx": 6,
+      "version": "7",
+      "when": 1778440800000,
+      "tag": "0006_backfill_claim_extension_events",
+      "breakpoints": true
     }
   ]
 }

@@ -10,6 +10,7 @@ export const CONTRACTS = {
   mergeManager: "0x7bda4820dbcfe471a2e23d3fa069c1cd261401e1" as Address,
   legacyMergeManagers: ["0x3e5bb2a724dbe9a6afe04ae7581639367693f51c" as Address],
   slopGame: "0x76c61b6140600429f50de5ac987e41672047cc28" as Address,
+  slopMergeLevelClaimExtension: "0xe49eb1e77dfa92d00e3d0e2302524a066216ad63" as Address,
   oldSlopGame: "0xb4ffbcce990a9a0b5f84722ba2d5db4e7bfc9d11" as Address,
   falseStartSlopGame: "0x886612a7a8dba8bbced8f86d26c1114857ccd9da" as Address,
   legacySlopGames: [
@@ -26,6 +27,15 @@ export const CONTRACTS = {
 export const CHAIN = mainnet;
 export const CHAIN_ID = 1;
 export const SLOP_GAME_ADDRESSES = [CONTRACTS.slopGame, ...CONTRACTS.legacySlopGames] as const;
+export const SLOP_CLAIM_CONTRACTS = [
+  CONTRACTS.slopMergeLevelClaimExtension,
+  CONTRACTS.slopGame,
+] as const;
+export const SLOP_CLAIM_EVENT_ADDRESSES = [
+  CONTRACTS.slopGame,
+  CONTRACTS.slopMergeLevelClaimExtension,
+  ...CONTRACTS.legacySlopGames,
+] as const;
 
 export function isKnownSlopGameAddress(address: string | null | undefined): boolean {
   if (!address) return false;

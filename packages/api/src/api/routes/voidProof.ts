@@ -3,6 +3,7 @@ import type { Context } from "hono";
 import type { ContentfulStatusCode } from "hono/utils/http-status";
 import { ensureEmbeddingHex, type ProofInputSource } from "@blockhash/slonks-core/proof";
 import { getAddress, type Address, type Hex } from "viem";
+import { CONTRACTS } from "../../chain/contracts.ts";
 import { env } from "../../env.ts";
 import { setNoStore } from "../cache.ts";
 import { resolvedProofCacheKey } from "../../prover/cacheKey.ts";
@@ -193,6 +194,11 @@ function parseProofContracts(raw: unknown): ProofContracts | string {
   if (!mergeManager.ok) return mergeManager.error;
   const activeState = contracts.activeState == null ? null : parseAddress(contracts.activeState, "contracts.activeState");
   if (activeState && !activeState.ok) return activeState.error;
+  const claimContract =
+    contracts.claimContract == null
+      ? getAddress(CONTRACTS.slopMergeLevelClaimExtension)
+      : parseAddress(contracts.claimContract, "contracts.claimContract");
+  if (typeof claimContract !== "string" && !claimContract.ok) return claimContract.error;
 
   return {
     slonks: slonks.value,
@@ -200,6 +206,7 @@ function parseProofContracts(raw: unknown): ProofContracts | string {
     imageModel: imageModel.value,
     mergeManager: mergeManager.value,
     activeState: activeState ? activeState.value : null,
+    claimContract: typeof claimContract === "string" ? claimContract : claimContract.value,
   };
 }
 
