@@ -2,7 +2,8 @@ import type { Address } from "viem";
 import { mainnet } from "viem/chains";
 
 // Verified live on mainnet via slonks.slonksRenderer() / renderer.imageModel() etc.
-// Active mainnet addresses are mirrored from ../llm-punks/docs/mainnet-addresses.md.
+// Active mainnet addresses are mirrored from llm-punks docs/mainnet-addresses.md
+// and docs/slop-merge-level-claim-extension.md.
 export const CONTRACTS = {
   slonks: "0x832233ddb7bcffd0ed53127dd6be3f1aa5845108" as Address,
   renderer: "0x5e68c484ef6dba6e6f27243e6c668674065c1066" as Address,
