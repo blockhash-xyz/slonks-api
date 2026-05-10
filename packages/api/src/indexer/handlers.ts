@@ -4,7 +4,7 @@
 import { and, eq, gt, isNull, or } from "drizzle-orm";
 import { CONTRACTS } from "../chain/contracts.ts";
 import { publicClient } from "../chain/client.ts";
-import { slonksAbi, slonksMergeManagerAbi } from "../chain/abis.ts";
+import { slonksAbi, slonksActiveStateAbi, slonksMergeManagerAbi } from "../chain/abis.ts";
 import { db } from "../db/client.ts";
 import { merges, sourcePunks, tokens, transfers } from "../db/schema.ts";
 import { diffPixels } from "@blockhash/slonks-core/diff";
@@ -217,8 +217,10 @@ export async function refreshTokenRenderFromChain(survivorTokenId: number): Prom
     return false;
   }
 
-  // Pull the new on-chain merge state (level + embedding) directly from the manager.
-  const [level, embeddingHex] = await Promise.all([
+  // Pull the on-chain merge level and prefer any active extension embedding.
+  // Revived / game-returned Slonks can render from active state while the
+  // merge manager still carries the pre-claim embedding.
+  const [level, mergeEmbeddingHex, activeEmbeddingHex] = await Promise.all([
     publicClient().readContract({
       address: CONTRACTS.mergeManager,
       abi: slonksMergeManagerAbi,
@@ -231,8 +233,17 @@ export async function refreshTokenRenderFromChain(survivorTokenId: number): Prom
       functionName: "mergeEmbedding",
       args: [BigInt(survivorTokenId)],
     }),
+    publicClient()
+      .readContract({
+        address: CONTRACTS.slopGame,
+        abi: slonksActiveStateAbi,
+        functionName: "activeEmbedding",
+        args: [BigInt(survivorTokenId)],
+      })
+      .catch(() => "0x" as `0x${string}`),
   ]);
 
+  const embeddingHex = activeEmbeddingHex.length > 2 ? activeEmbeddingHex : mergeEmbeddingHex;
   const embeddingBytes = embeddingHex.length > 2 ? hexToBytes(embeddingHex) : null;
   const update: Partial<typeof tokens.$inferInsert> = {
     mergeLevel: Number(level),
