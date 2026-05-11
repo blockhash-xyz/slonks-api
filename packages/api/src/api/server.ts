@@ -15,6 +15,7 @@ import { holders } from "./routes/holders.ts";
 import { voidProof } from "./routes/voidProof.ts";
 import { voidRoutes } from "./routes/void.ts";
 import { png } from "./routes/png.ts";
+import { revival } from "./routes/revival.ts";
 
 export function buildApp() {
   const app = new Hono();
@@ -42,6 +43,7 @@ export function buildApp() {
   app.route("/void-proof", voidProof);
   app.route("/proofs/void", voidProof);
   app.route("/png", png);
+  app.route("/revival", revival);
 
   app.notFound((c) => {
     setNoStore(c);

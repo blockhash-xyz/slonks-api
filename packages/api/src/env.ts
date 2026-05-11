@@ -11,6 +11,8 @@ const schema = z.object({
   RPC_URL: z.string().url().optional(),
   OPENSEA_API_KEY: z.string().optional(),
   OPENSEA_SLUG: z.string().default("slonks"),
+  SLONKS_SIGNER_PRIVATE_KEY: z.string().optional(),
+  SLOP_SIGNED_DUTCH_AUCTION_EXTENSION: z.string().optional(),
   SLOP_REMOTE_PROVER_URL: z.string().url().optional(),
   SLOP_REMOTE_PROVER_TIMEOUT_MS: z.coerce.number().int().positive().default(300_000),
   SLOP_REMOTE_PROVER_BUSY_RETRIES: z.coerce.number().int().nonnegative().default(12),

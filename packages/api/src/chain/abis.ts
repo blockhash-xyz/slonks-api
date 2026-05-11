@@ -167,6 +167,13 @@ export const slopGameProofStateAbi = [
 export const slopGameAbi = [
   {
     type: "function",
+    name: "voidedTokenAt",
+    stateMutability: "view",
+    inputs: [{ name: "index", type: "uint256" }],
+    outputs: [{ type: "uint256" }],
+  },
+  {
+    type: "function",
     name: "isSlopClaimPending",
     stateMutability: "view",
     inputs: [{ name: "tokenId", type: "uint256" }],
@@ -280,6 +287,51 @@ export const slopGameAbi = [
       { name: "spent", type: "uint256", indexed: false },
     ],
     anonymous: false,
+  },
+] as const;
+
+export const slopSignedDutchAuctionAbi = [
+  {
+    type: "function",
+    name: "pendingRevival",
+    stateMutability: "view",
+    inputs: [],
+    outputs: [
+      { name: "requester", type: "address" },
+      { name: "targetBlock", type: "uint64" },
+      { name: "expiresBlock", type: "uint64" },
+      { name: "eligibleSlonkCount", type: "uint32" },
+      { name: "revivalNonce", type: "uint64" },
+      { name: "cost", type: "uint256" },
+    ],
+  },
+  {
+    type: "function",
+    name: "claimDigest",
+    stateMutability: "view",
+    inputs: [],
+    outputs: [{ type: "bytes32" }],
+  },
+  {
+    type: "function",
+    name: "entropySigner",
+    stateMutability: "view",
+    inputs: [],
+    outputs: [{ type: "address" }],
+  },
+  {
+    type: "function",
+    name: "game",
+    stateMutability: "view",
+    inputs: [],
+    outputs: [{ type: "address" }],
+  },
+  {
+    type: "function",
+    name: "claimRevival",
+    stateMutability: "nonpayable",
+    inputs: [{ name: "signature", type: "bytes" }],
+    outputs: [],
   },
 ] as const;
 

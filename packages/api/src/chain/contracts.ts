@@ -21,6 +21,7 @@ export const CONTRACTS = {
   slopToken: "0x999b49c0d1612e619a4a4f6280733184da025108" as Address,
   honkVerifier: "0x5cbe9cbedc27dd4f082119586f5d924645064eb3" as Address,
   dutchAuctionExtension: "0xf79822c2331db455087b51b6c97e4064138bb635" as Address,
+  signedDutchAuctionExtension: "0x9454262f710c04db1c5a1e016a3cc038857660a5" as Address,
   oldGameSweepExtension: "0xabfe4e6dbcbf1468e6e50c2c2223a91eb8c43b18" as Address,
   cryptoPunksData: "0x16f5a35647d6f03d5d3da7b35409d65ba03af3b2" as Address,
 } as const;

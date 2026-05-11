@@ -2,8 +2,8 @@
 
 Private package for the Slonks indexer and HTTP API. The API mirrors the
 on-chain Slonks rendering math so apps can read token snapshots, pixels, merge
-previews, listings, holders, activity, and void proofs without doing huge
-`eth_call`s or local proof generation from the browser.
+previews, listings, holders, activity, void proofs, and signed revival claims
+without doing huge `eth_call`s or local proof generation from the browser.
 
 Public API:
 
@@ -33,6 +33,7 @@ https://api.slonks.xyz
 - `Previous SlopGame`: `0xb4ffbcce990a9a0b5f84722ba2d5db4e7bfc9d11`
 - `False-start SlopGameV2`: `0x886612a7a8dba8bbced8f86d26c1114857ccd9da`
 - `SlopDutchAuctionExtension`: `0xf79822c2331db455087b51b6c97e4064138bb635`
+- `SlopSignedDutchAuctionExtension`: `0x9454262f710c04db1c5a1e016a3cc038857660a5`
 - `HonkVerifier`: `0x5cbe9cbedc27dd4f082119586f5d924645064eb3`
 - `CryptoPunksData`: `0x16f5a35647d6f03d5d3da7b35409d65ba03af3b2`
 
@@ -76,9 +77,9 @@ locally from the bundled model weights.
   - `slopMask`: 72 bytes.
 - Most list endpoints use `page`, `limit`, `hasMore`, and `nextPage`.
 - `/activity` uses cursor pagination with `nextCursor`.
-- Proof generation endpoints are `POST` and use `no-store`; the API keeps a
-  durable Postgres proof cache keyed by token state, plus the prover's short
-  in-process cache for repeated work while a machine is warm.
+- Proof and signature generation endpoints are `POST` and use `no-store`; the
+  API keeps a durable Postgres proof cache keyed by token state, plus the
+  prover's short in-process cache for repeated work while a machine is warm.
 - Cacheable shared `GET` responses include `Cache-Control`,
   `CDN-Cache-Control`, `ETag`, `Vary: Origin`, and `X-Slonks-Cache` headers.
 - Stateful token, owner, holder, pending-claim, lineage/history, and PNG
@@ -113,7 +114,8 @@ Current shared-cache TTLs:
 Health checks and upstream listing errors use `no-store`.
 Direct token snapshots, token lists, bulk token snapshots, token
 lineage/history, owner tokens/summary, holders, token PNG images, pending void
-claims, token-derived distributions, and all void proof endpoints use
+claims, token-derived distributions, all void proof endpoints, and revival
+claim signatures use
 `no-store` externally. Proof bytes are stored in Postgres by token state so a
 stopped prover machine does not lose already-generated proofs. The prover
 process also keeps a short in-memory cache while it is warm.
@@ -742,6 +744,60 @@ Errors:
 - `429`: prover is busy with another token; retry shortly.
 - `503`: proof generation is disabled or prover binaries are unavailable.
 
+### `POST /revival/claim-signature`
+
+Returns the 65-byte raw ECDSA signature needed for
+`SlopSignedDutchAuctionExtension.claimRevival(signature)`.
+
+The API reads the configured signed Dutch auction extension, checks the pending
+request, calls the contract's `claimDigest()`, signs that 32-byte digest with
+`SLONKS_SIGNER_PRIVATE_KEY`, verifies the signer matches `entropySigner()`, and
+returns calldata for the frontend to submit.
+
+Body: none.
+
+Returns:
+
+```ts
+{
+  chainId: 1;
+  auction: string;
+  game: string;
+  signer: string;
+  digest: `0x${string}`;
+  signature: `0x${string}`;
+  signatureHash: `0x${string}`;
+  pendingRevival: {
+    requester: string;
+    targetBlock: string;
+    expiresBlock: string;
+    eligibleSlonkCount: number;
+    revivalNonce: string;
+    cost: string;
+  };
+  expected: {
+    voidIndex: string;
+    tokenId: string | null;
+    sourcePercent: 0 | 25 | 50 | 75 | 100;
+  };
+  transaction: {
+    to: string;
+    data: `0x${string}`;
+    functionName: "claimRevival";
+    args: [`0x${string}`];
+  };
+  generatedAt: string;
+}
+```
+
+Errors:
+
+- `409`: no pending revival, expired pending request, or API signer does not
+  match the auction's `entropySigner()`.
+- `502`: the configured contract cannot be read as a signed Dutch auction.
+- `503`: `SLONKS_SIGNER_PRIVATE_KEY` or
+  `SLOP_SIGNED_DUTCH_AUCTION_EXTENSION` is not configured.
+
 ## Event Shapes
 
 ```ts
@@ -810,6 +866,8 @@ files hit 100% line, function, and statement coverage.
 - `RPC_URL`: optional fallback RPC URL.
 - `OPENSEA_API_KEY`: optional; enables `/listings`.
 - `OPENSEA_SLUG`: optional; defaults to `slonks`.
+- `SLONKS_SIGNER_PRIVATE_KEY`: optional signer used by `/revival/claim-signature`; set as a Fly secret and never commit it.
+- `SLOP_SIGNED_DUTCH_AUCTION_EXTENSION`: optional signed Dutch auction extension address used by `/revival/claim-signature`.
 - `SLOP_REMOTE_PROVER_URL`: optional remote prover base URL. When set, `/void-proof` proxies proof generation instead of running it on the web process.
 - `SLOP_REMOTE_PROVER_TIMEOUT_MS`: optional timeout for remote prover requests. Default `300000`.
 - `SLOP_PROVER_AUTH_TOKEN`: optional bearer token shared by the public API and remote prover app.
