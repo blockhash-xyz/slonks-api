@@ -144,10 +144,14 @@ function configuredProofContracts(): ProofContracts {
   };
 }
 
-async function resolveProofInput(client: PublicClient, contracts: ProofContracts, tokenId: number): Promise<ProofInput> {
+export async function resolveProofInput(
+  client: PublicClient,
+  contracts: ProofContracts,
+  tokenId: number,
+): Promise<ProofInput> {
   const activeState = contracts.activeState ?? getAddress(CONTRACTS.slopGame);
-  const [sourceIdResult, activeEmbeddingResult, mergeEmbeddingResult] = await client.multicall({
-    allowFailure: true,
+  const [sourceIdResult, activeEmbedding, mergeEmbedding] = await client.multicall({
+    allowFailure: false,
     contracts: [
       {
         address: contracts.slonks,
@@ -170,10 +174,8 @@ async function resolveProofInput(client: PublicClient, contracts: ProofContracts
     ],
   });
 
-  if (sourceIdResult.status !== "success") throw sourceIdResult.error;
-  const sourceId = Number(sourceIdResult.result);
+  const sourceId = Number(sourceIdResult);
 
-  const activeEmbedding = activeEmbeddingResult.status === "success" ? activeEmbeddingResult.result : "0x";
   if (!isEmptyHexBytes(activeEmbedding)) {
     return {
       sourceId,
@@ -182,7 +184,6 @@ async function resolveProofInput(client: PublicClient, contracts: ProofContracts
     };
   }
 
-  const mergeEmbedding = mergeEmbeddingResult.status === "success" ? mergeEmbeddingResult.result : "0x";
   if (!isEmptyHexBytes(mergeEmbedding)) {
     return {
       sourceId,
