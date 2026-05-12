@@ -24,12 +24,12 @@ https://api.slonks.xyz
 - Chain: Ethereum mainnet, `chainId: 1`
 - Slonks deploy block: `24998760`
 - `Slonks`: `0x832233ddb7bcffd0ed53127dd6be3f1aa5845108`
-- `SlonksRenderer`: `0x5e68c484ef6dba6e6f27243e6c668674065c1066`
+- `SlonksRenderer`: `0xA5CC6B20e0fA329Ca721Df832dfd609C104fB6fd`
 - `SlonksImageModel`: `0xca116243a2013ed33015c776ee37310b199ee80c`
-- `SlonksMergeManager`: `0x7bda4820dbcfe471a2e23d3fa069c1cd261401e1`
+- `SlonksMergeManager`: `0x5D56D3527F470CA24aF864CC5571d8Fb8De785d2`
 - `SLOP`: `0x999b49c0d1612e619a4a4f6280733184da025108`
 - `SlopGameV2`: `0x76c61b6140600429f50de5ac987e41672047cc28`
-- `SlopMergeLevelClaimExtension`: `0xe49eb1e77dfa92d00e3d0e2302524a066216ad63`
+- `SlopMergeLevelClaimExtension`: `0xF251D1D665229bd6A7045aCBfbeC132CD1934b06`
 - `Previous SlopGame`: `0xb4ffbcce990a9a0b5f84722ba2d5db4e7bfc9d11`
 - `False-start SlopGameV2`: `0x886612a7a8dba8bbced8f86d26c1114857ccd9da`
 - `SlopDutchAuctionExtension`: `0xf79822c2331db455087b51b6c97e4064138bb635`

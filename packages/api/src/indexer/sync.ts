@@ -169,8 +169,13 @@ async function processSlonksLogs(logs: Log[]): Promise<boolean> {
           .where(eq(collectionState.id, 1));
         break;
       }
+      case "MetadataUpdate": {
+        const args = decoded.args as { _tokenId?: bigint };
+        if (args._tokenId != null) await refreshTokenRenderFromChain(Number(args._tokenId));
+        changed = true;
+        break;
+      }
       case "BatchMetadataUpdate":
-      case "MetadataUpdate":
         changed = true;
         break;
     }
