@@ -7,11 +7,12 @@ import {
   failVoidProofJob,
   rejectVoidProofJob,
   releaseVoidProofJob,
-  requestFromJob,
 } from "./prover/jobs.ts";
 import { isPendingVoidClaim, notPendingVoidClaimMessage } from "./prover/claimGuard.ts";
+import { resolvedProofCacheKey } from "./prover/cacheKey.ts";
 import { isVoidProof, requestRemoteVoidProof, RemoteProverError } from "./prover/remote.ts";
 import { writeStoredVoidProof } from "./prover/store.ts";
+import { resolveVoidProofRequest } from "./prover/voidProof.ts";
 
 const workerId = `proof-worker-${randomUUID()}`;
 let stopping = false;
@@ -36,9 +37,17 @@ async function workerLoop(index: number): Promise<void> {
       continue;
     }
 
-    const request = requestFromJob(job);
     console.log(`void proof job ${job.cacheKey} token ${job.tokenId} attempt ${job.attempts} started`);
     try {
+      const request = await resolveVoidProofRequest(job.tokenId);
+      const currentCacheKey = resolvedProofCacheKey(request);
+      if (currentCacheKey !== job.cacheKey) {
+        const message = "proof job is stale; request a new proof";
+        await rejectVoidProofJob(job.cacheKey, message);
+        console.warn(`void proof job ${job.cacheKey} token ${job.tokenId} rejected: ${message}`);
+        continue;
+      }
+
       if (!(await isPendingVoidClaim(job.tokenId))) {
         const message = notPendingVoidClaimMessage(job.tokenId);
         await rejectVoidProofJob(job.cacheKey, message);

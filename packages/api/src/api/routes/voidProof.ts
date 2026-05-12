@@ -54,15 +54,24 @@ voidProof.get("/jobs/:cacheKey", async (c) => {
 
   const { pendingFromJob, readVoidProofJob } = await import("../../prover/jobs.ts");
   const job = await readVoidProofJob(cacheKey);
-  if (job && job.status !== "succeeded") {
-    const pending = pendingFromJob(job);
-    c.header("Retry-After", pending.retryAfter.toString());
-    return c.json(pending, pending.status === "failed" ? 500 : 202);
+  if (job) {
+    const stale = await staleProofCacheResponse(c, job.tokenId, cacheKey);
+    if (stale) return stale;
+
+    if (job.status !== "succeeded") {
+      const pending = pendingFromJob(job);
+      c.header("Retry-After", pending.retryAfter.toString());
+      return c.json(pending, pending.status === "failed" ? 500 : 202);
+    }
   }
 
   const { readStoredVoidProofByCacheKey } = await import("../../prover/store.ts");
   const stored = await readStoredVoidProofByCacheKey(cacheKey);
-  if (stored) return c.json(stored);
+  if (stored) {
+    const stale = await staleProofCacheResponse(c, stored.tokenId, cacheKey);
+    if (stale) return stale;
+    return c.json(stored);
+  }
 
   return c.json({ error: "proof job not found" }, 404);
 });
@@ -80,6 +89,25 @@ async function respondWithProof(c: Context, build: () => Promise<unknown>): Prom
       return c.json({ error: err.message }, 503);
     }
     throw err;
+  }
+}
+
+async function staleProofCacheResponse(c: Context, tokenId: number, cacheKey: string): Promise<Response | null> {
+  try {
+    const currentCacheKey = resolvedProofCacheKey(await resolveVoidProofRequest(tokenId));
+    if (currentCacheKey === cacheKey) return null;
+    return c.json(
+      {
+        error: "proof cache entry is stale; request a new proof",
+        tokenId,
+        cacheKey,
+        currentCacheKey,
+      },
+      409,
+    );
+  } catch (err) {
+    console.warn(`failed to validate proof cache freshness for ${cacheKey}:`, err);
+    return c.json({ error: "failed to validate proof cache freshness" }, 503);
   }
 }
 
