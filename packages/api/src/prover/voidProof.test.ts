@@ -14,7 +14,7 @@ const request: ResolvedVoidProofRequest = {
     imageModel: "0xca116243a2013ed33015c776ee37310b199ee80c",
     mergeManager: "0x5d56d3527f470ca24af864cc5571d8fb8de785d2",
     activeState: "0x76c61b6140600429f50de5ac987e41672047cc28",
-    claimContract: "0xf251d1d665229bd6a7045acbfbec132cd1934b06",
+    claimContract: "0xfe2d9f4f70b1dc2a7c3d940691eba293488178fa",
   },
 };
 
@@ -29,7 +29,7 @@ describe("resolvedProofCacheKey", () => {
           imageModel: "0xCa116243a2013ED33015c776ee37310b199Ee80c",
           mergeManager: "0x5D56D3527F470CA24aF864CC5571d8Fb8De785d2",
           activeState: "0x76C61B6140600429F50De5aC987E41672047cc28",
-          claimContract: "0xF251D1D665229bd6A7045aCBfbeC132CD1934b06",
+          claimContract: "0xFE2d9F4F70b1dc2a7C3d940691eBA293488178fA",
         },
       }),
     );

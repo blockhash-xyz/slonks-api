@@ -29,7 +29,7 @@ https://api.slonks.xyz
 - `SlonksMergeManager`: `0x5D56D3527F470CA24aF864CC5571d8Fb8De785d2`
 - `SLOP`: `0x999b49c0d1612e619a4a4f6280733184da025108`
 - `SlopGameV2`: `0x76c61b6140600429f50de5ac987e41672047cc28`
-- `SlopMergeLevelClaimExtension`: `0xF251D1D665229bd6A7045aCBfbeC132CD1934b06`
+- `SlopMergeLevelClaimExtension`: `0xFE2d9F4F70b1dc2a7C3d940691eBA293488178fA`
 - `Previous SlopGame`: `0xb4ffbcce990a9a0b5f84722ba2d5db4e7bfc9d11`
 - `False-start SlopGameV2`: `0x886612a7a8dba8bbced8f86d26c1114857ccd9da`
 - `SlopDutchAuctionExtension`: `0xf79822c2331db455087b51b6c97e4064138bb635`

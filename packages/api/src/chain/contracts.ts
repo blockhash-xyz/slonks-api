@@ -14,8 +14,11 @@ export const CONTRACTS = {
     "0x3e5bb2a724dbe9a6afe04ae7581639367693f51c" as Address,
   ],
   slopGame: "0x76c61b6140600429f50de5ac987e41672047cc28" as Address,
-  slopMergeLevelClaimExtension: "0xf251d1d665229bd6a7045acbfbec132cd1934b06" as Address,
-  legacySlopMergeLevelClaimExtensions: ["0xe49eb1e77dfa92d00e3d0e2302524a066216ad63" as Address],
+  slopMergeLevelClaimExtension: "0xfe2d9f4f70b1dc2a7c3d940691eba293488178fa" as Address,
+  legacySlopMergeLevelClaimExtensions: [
+    "0xf251d1d665229bd6a7045acbfbec132cd1934b06" as Address,
+    "0xe49eb1e77dfa92d00e3d0e2302524a066216ad63" as Address,
+  ],
   oldSlopGame: "0xb4ffbcce990a9a0b5f84722ba2d5db4e7bfc9d11" as Address,
   falseStartSlopGame: "0x886612a7a8dba8bbced8f86d26c1114857ccd9da" as Address,
   legacySlopGames: [
