@@ -288,6 +288,65 @@ export const slopGameAbi = [
     ],
     anonymous: false,
   },
+  {
+    type: "event",
+    name: "VoidPriceInitialized",
+    inputs: [
+      { name: "tokenId", type: "uint256", indexed: true },
+      { name: "slop", type: "uint256", indexed: false },
+      { name: "price", type: "uint256", indexed: false },
+    ],
+    anonymous: false,
+  },
+  {
+    type: "event",
+    name: "SlonkPurchasedFromVoid",
+    inputs: [
+      { name: "tokenId", type: "uint256", indexed: true },
+      { name: "buyer", type: "address", indexed: true },
+      { name: "recipient", type: "address", indexed: true },
+      { name: "price", type: "uint256", indexed: false },
+    ],
+    anonymous: false,
+  },
+] as const;
+
+export const slopFixedPriceVoidAbi = [
+  {
+    type: "function",
+    name: "voidPriceInitialized",
+    stateMutability: "view",
+    inputs: [{ name: "tokenId", type: "uint256" }],
+    outputs: [{ type: "bool" }],
+  },
+  {
+    type: "function",
+    name: "voidPrice",
+    stateMutability: "view",
+    inputs: [{ name: "tokenId", type: "uint256" }],
+    outputs: [{ type: "uint256" }],
+  },
+  {
+    type: "function",
+    name: "buyFromVoid",
+    stateMutability: "nonpayable",
+    inputs: [
+      { name: "tokenId", type: "uint256" },
+      { name: "maxPrice", type: "uint256" },
+    ],
+    outputs: [{ name: "price", type: "uint256" }],
+  },
+  {
+    type: "function",
+    name: "buyFromVoidTo",
+    stateMutability: "nonpayable",
+    inputs: [
+      { name: "tokenId", type: "uint256" },
+      { name: "recipient", type: "address" },
+      { name: "maxPrice", type: "uint256" },
+    ],
+    outputs: [{ name: "price", type: "uint256" }],
+  },
 ] as const;
 
 export const slopSignedDutchAuctionAbi = [

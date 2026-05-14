@@ -346,6 +346,7 @@ async function processSlopGameLogs(
       target?: `0x${string}`;
       slop?: bigint;
       mintedAmount?: bigint;
+      price?: bigint;
     };
     if (args.tokenId == null) continue;
     const tokenId = Number(args.tokenId);
@@ -539,6 +540,10 @@ async function processSlopGameLogs(
         changed = true;
         break;
       }
+      case "VoidPriceInitialized":
+      case "SlonkPurchasedFromVoid":
+        changed = true;
+        break;
     }
   }
   return changed;

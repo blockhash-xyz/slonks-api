@@ -224,7 +224,7 @@ function parseProofContracts(raw: unknown): ProofContracts | string {
   if (activeState && !activeState.ok) return activeState.error;
   const claimContract =
     contracts.claimContract == null
-      ? getAddress(CONTRACTS.slopMergeLevelClaimExtension)
+      ? getAddress(CONTRACTS.slopClaimExtension)
       : parseAddress(contracts.claimContract, "contracts.claimContract");
   if (typeof claimContract !== "string" && !claimContract.ok) return claimContract.error;
 

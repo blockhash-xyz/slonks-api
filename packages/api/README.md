@@ -2,8 +2,9 @@
 
 Private package for the Slonks indexer and HTTP API. The API mirrors the
 on-chain Slonks rendering math so apps can read token snapshots, pixels, merge
-previews, listings, holders, activity, void proofs, and signed revival claims
-without doing huge `eth_call`s or local proof generation from the browser.
+previews, listings, holders, activity, void proofs, and fixed-price void
+inventory without doing huge `eth_call`s or local proof generation from the
+browser.
 
 Public API:
 
@@ -29,7 +30,8 @@ https://api.slonks.xyz
 - `SlonksMergeManager`: `0x5D56D3527F470CA24aF864CC5571d8Fb8De785d2`
 - `SLOP`: `0x999b49c0d1612e619a4a4f6280733184da025108`
 - `SlopGameV2`: `0x76c61b6140600429f50de5ac987e41672047cc28`
-- `SlopMergeLevelClaimExtension`: `0xFE2d9F4F70b1dc2a7C3d940691eBA293488178fA`
+- `SlopFixedPriceVoidExtension`: `0xf50fdb3392396d06923f1971daec7f98dc33ca70`
+- `Previous SlopMergeLevelClaimExtension`: `0xFE2d9F4F70b1dc2a7C3d940691eBA293488178fA`
 - `Previous SlopGame`: `0xb4ffbcce990a9a0b5f84722ba2d5db4e7bfc9d11`
 - `False-start SlopGameV2`: `0x886612a7a8dba8bbced8f86d26c1114857ccd9da`
 - `SlopDutchAuctionExtension`: `0xf79822c2331db455087b51b6c97e4064138bb635`
@@ -43,8 +45,9 @@ https://api.slonks.xyz
 - `Slonks` `RevealCommitted` and `Revealed`: collection phase and `shuffleOffset`.
 - `Slonks` `BatchMetadataUpdate` / `MetadataUpdate`: cache invalidation hints.
 - Active and legacy `SlonksMergeManager` `SlonkMerged`: donor-to-survivor merge edges, resulting merge level, and cumulative embedding.
-- Active `SlopGameV2` and `SlopMergeLevelClaimExtension` claim events: Slonks
-  locked for SLOP, unlocked, claimed, protocol-voided, and bought-and-voided.
+- Active `SlopGameV2`, `SlopFixedPriceVoidExtension`, and legacy claim events:
+  Slonks locked for SLOP, unlocked, claimed, protocol-voided, bought-and-voided,
+  fixed-price void price initialization, and exact void purchases.
 
 ## What It Precomputes
 
@@ -96,8 +99,8 @@ Redis under a `token-state` version key. The indexer
 bumps that version when token state changes through transfers, merges, reveal,
 metadata update hints, game locks/unlocks/claims, or active embedding
 set/clear events. That makes old token metadata, PNGs, owner views, holders,
-pending claims, and token-derived distributions unreachable across web
-machines as soon as the indexer sees the event.
+pending claims, void inventory, and token-derived distributions unreachable
+across web machines as soon as the indexer sees the event.
 
 Shared-cacheable responses use `max-age=0` for browsers,
 `s-maxage`/`CDN-Cache-Control` for shared caches, `stale-while-revalidate`, and
@@ -114,8 +117,8 @@ Current shared-cache TTLs:
 Health checks and upstream listing errors use `no-store`.
 Direct token snapshots, token lists, bulk token snapshots, token
 lineage/history, owner tokens/summary, holders, token PNG images, pending void
-claims, token-derived distributions, all void proof endpoints, and revival
-claim signatures use
+claims, void inventory, token-derived distributions, all void proof endpoints,
+and legacy revival claim signatures use
 `no-store` externally. Proof bytes are stored in Postgres by token state so a
 stopped prover machine does not lose already-generated proofs. The prover
 process also keeps a short in-memory cache while it is warm.
@@ -509,6 +512,7 @@ Returns:
   contracts: {
     activeGame: string;
     claimExtension: string;
+    fixedPriceVoidExtension: string;
     claimContracts: string[];
     previousGame: string;
     falseStartGame: string;
@@ -528,6 +532,73 @@ Returns:
     lockedAtLogIndex: number | null;
     lockedAtTxHash: string | null;
     lockedAtTimestamp: string | null;
+  }>;
+}
+```
+
+### `GET /void/inventory`
+
+Slonks currently in the V2 void and buyable through the fixed-price void
+extension. This is the zero-sum pull-from-void flow: the buyer chooses the exact
+`tokenId` and burns that token's stored `voidPrice` in SLOP.
+
+Alias: `GET /void/tokens`.
+
+Query params:
+
+- `page`: default `1`.
+- `limit`: default `50`, max `200`.
+- `sort`: `id_asc` default, `id_desc`, `price_asc`, `price_desc`, `slop_asc`, or `slop_desc`.
+- `include`: add `pixels` to include `generatedPixels` and `originalRgba`.
+
+The returned `slopAllowanceTarget` is `SlopGameV2`, not the extension. The
+fixed-price extension calls `SlopGameV2.extensionBurnSlop(...)`, so buyers
+approve the game for SLOP and then call `buyFromVoid(tokenId, maxPrice)` on
+`fixedPriceVoidExtension`.
+
+Existing void inventory must have its fixed price initialized on-chain before
+it can be bought. Those rows stay in the response with `buyable: false`,
+`voidPriceInitialized: false`, and no `voidPrice`.
+
+Example:
+
+```bash
+curl -sS "https://api.slonks.xyz/void/inventory?sort=price_asc&limit=25"
+```
+
+Returns:
+
+```ts
+{
+  chainId: 1;
+  contracts: {
+    activeGame: string;
+    claimExtension: string;
+    fixedPriceVoidExtension: string;
+    slopToken: string;
+    slopAllowanceTarget: string;
+    claimContracts: string[];
+  };
+  count: number;
+  page: number;
+  limit: number;
+  hasMore: boolean;
+  nextPage: number | null;
+  items: Array<TokenListItem & {
+    claimStatus: "claimed" | "voided";
+    claimRecipient: string | null;
+    lockedOn: string | null;
+    buyable: boolean;
+    voidPriceInitialized: boolean;
+    voidPrice: string | null; // wei-denominated SLOP
+    voidPriceSlop: number | string | null;
+    buyTarget: string;
+    slopAllowanceTarget: string;
+    buyFunction: "buyFromVoid";
+    voidedAtBlock: string | null;
+    voidedAtLogIndex: number | null;
+    voidedAtTxHash: string | null;
+    voidedAtTimestamp: string | null;
   }>;
 }
 ```
@@ -662,10 +733,11 @@ Returns:
 
 ### `POST /void-proof`
 
-Generates the UltraHonk proof and public inputs needed by the voiding contract.
+Generates the UltraHonk proof and public inputs needed by the active voiding
+contract.
 Alias: `POST /proofs/void`.
 
-The API reads current chain state, automatically chooses the active revival
+The API reads current chain state, automatically chooses the active
 embedding, merge embedding, or source embedding, writes the Noir prover inputs,
 runs `nargo execute`, and runs Barretenberg `bb prove`.
 
@@ -709,7 +781,7 @@ type VoidProof = {
     imageModel: string;
     mergeManager: string;
     activeState: string | null;
-    claimContract: string;
+    claimContract: string; // active SlopFixedPriceVoidExtension
   };
   generatedAt: string;
 };
@@ -745,6 +817,10 @@ Errors:
 - `503`: proof generation is disabled or prover binaries are unavailable.
 
 ### `POST /revival/claim-signature`
+
+Legacy signed Dutch auction helper. The fixed-price void flow does not need an
+API signature because buyers choose the exact Slonk and call
+`buyFromVoid(tokenId, maxPrice)`.
 
 Returns the 65-byte raw ECDSA signature needed for
 `SlopSignedDutchAuctionExtension.claimRevival(signature)`.

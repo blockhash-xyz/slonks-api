@@ -3,7 +3,7 @@ import { mainnet } from "viem/chains";
 
 // Verified live on mainnet via slonks.slonksRenderer() / renderer.imageModel() etc.
 // Active mainnet addresses are mirrored from llm-punks docs/mainnet-addresses.md
-// and docs/slop-merge-level-claim-extension.md.
+// plus the fixed-price void deployment broadcast.
 export const CONTRACTS = {
   slonks: "0x832233ddb7bcffd0ed53127dd6be3f1aa5845108" as Address,
   renderer: "0xa5cc6b20e0fa329ca721df832dfd609c104fb6fd" as Address,
@@ -14,6 +14,8 @@ export const CONTRACTS = {
     "0x3e5bb2a724dbe9a6afe04ae7581639367693f51c" as Address,
   ],
   slopGame: "0x76c61b6140600429f50de5ac987e41672047cc28" as Address,
+  slopFixedPriceVoidExtension: "0xf50fdb3392396d06923f1971daec7f98dc33ca70" as Address,
+  slopClaimExtension: "0xf50fdb3392396d06923f1971daec7f98dc33ca70" as Address,
   slopMergeLevelClaimExtension: "0xfe2d9f4f70b1dc2a7c3d940691eba293488178fa" as Address,
   legacySlopMergeLevelClaimExtensions: [
     "0xf251d1d665229bd6a7045acbfbec132cd1934b06" as Address,
@@ -38,12 +40,14 @@ export const CHAIN = mainnet;
 export const CHAIN_ID = 1;
 export const SLOP_GAME_ADDRESSES = [CONTRACTS.slopGame, ...CONTRACTS.legacySlopGames] as const;
 export const SLOP_CLAIM_CONTRACTS = [
+  CONTRACTS.slopClaimExtension,
   CONTRACTS.slopMergeLevelClaimExtension,
   ...CONTRACTS.legacySlopMergeLevelClaimExtensions,
   CONTRACTS.slopGame,
 ] as const;
 export const SLOP_CLAIM_EVENT_ADDRESSES = [
   CONTRACTS.slopGame,
+  CONTRACTS.slopClaimExtension,
   CONTRACTS.slopMergeLevelClaimExtension,
   ...CONTRACTS.legacySlopMergeLevelClaimExtensions,
   ...CONTRACTS.legacySlopGames,

@@ -140,7 +140,7 @@ function configuredProofContracts(): ProofContracts {
     imageModel: getAddress(CONTRACTS.imageModel),
     mergeManager: getAddress(CONTRACTS.mergeManager),
     activeState: getAddress(CONTRACTS.slopGame),
-    claimContract: getAddress(CONTRACTS.slopMergeLevelClaimExtension),
+    claimContract: getAddress(CONTRACTS.slopClaimExtension),
   };
 }
 

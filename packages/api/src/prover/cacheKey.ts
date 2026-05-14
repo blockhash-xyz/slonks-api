@@ -31,6 +31,6 @@ function canonicalProofContracts(contracts: ProofContracts): ProofContracts {
     imageModel: getAddress(contracts.imageModel),
     mergeManager: getAddress(contracts.mergeManager),
     activeState: contracts.activeState ? getAddress(contracts.activeState) : null,
-    claimContract: getAddress(contracts.claimContract ?? CONTRACTS.slopMergeLevelClaimExtension),
+    claimContract: getAddress(contracts.claimContract ?? CONTRACTS.slopClaimExtension),
   };
 }
