@@ -24,6 +24,7 @@ type MergeTreeState = {
   tokenId: number;
   sourceId: number | null;
   mergeLevel: number;
+  stateSource: "source" | "merge-replay" | "indexed-current";
   embedding: `0x${string}` | null;
   generatedPixels?: `0x${string}` | null;
   originalRgba?: `0x${string}` | null;
@@ -112,7 +113,7 @@ export async function buildMergeTree(tokenId: number, includePixels: boolean): P
     claimsById,
     sourcesById,
   };
-  const root = buildNode(tokenId, Number.POSITIVE_INFINITY, context, new Set());
+  const root = buildNode(tokenId, Number.POSITIVE_INFINITY, context, new Set(), true);
   const mergeRows = [...reachable.mergeOrders].sort((a, b) => a - b).map((order) => orderedMerges[order]!);
 
   return {
@@ -152,7 +153,13 @@ function collectReachable(tokenId: number, bySurvivor: Map<number, OrderedMerge[
   return { tokenIds, mergeOrders };
 }
 
-function buildNode(tokenId: number, cutoffOrder: number, context: BuildContext, stack: Set<number>): MergeTreeNode {
+function buildNode(
+  tokenId: number,
+  cutoffOrder: number,
+  context: BuildContext,
+  stack: Set<number>,
+  useIndexedCurrent = false,
+): MergeTreeNode {
   if (stack.has(tokenId)) throw new Error(`cycle detected in merge tree at token ${tokenId}`);
   stack.add(tokenId);
 
@@ -186,6 +193,11 @@ function buildNode(tokenId: number, cutoffOrder: number, context: BuildContext, 
     leafCount += donor.leafCount;
   }
 
+  const replayedCurrent = current;
+  const indexedCurrent =
+    useIndexedCurrent && token?.exists ? indexedCurrentState(tokenId, token, source, context.includePixels) : null;
+  current = indexedCurrent ?? replayedCurrent;
+
   stack.delete(tokenId);
   return {
     tokenId,
@@ -216,6 +228,7 @@ function initialState(
     tokenId,
     sourceId: token?.sourceId ?? null,
     mergeLevel: 0,
+    stateSource: "source",
     embedding: source?.sourceEmbedding ?? null,
     generatedPixels: source?.generatedPixels ?? null,
     originalRgba: source?.originalRgba ?? null,
@@ -244,6 +257,7 @@ function mergedState(
     tokenId,
     sourceId: token?.sourceId ?? null,
     mergeLevel: event.mergeLevel,
+    stateSource: "merge-replay",
     embedding,
     generatedPixels,
     originalRgba: source?.originalRgba ?? null,
@@ -253,10 +267,36 @@ function mergedState(
   });
 }
 
+function indexedCurrentState(
+  tokenId: number,
+  token: TokenRow,
+  source: SourcePunkRow | null,
+  includePixels: boolean,
+): MergeTreeState {
+  const generatedPixels = token.generatedPixels ?? source?.generatedPixels ?? null;
+  const embedding = token.mergeEmbedding ?? source?.sourceEmbedding ?? null;
+  const slop = token.slop ?? (token.mergeLevel === 0 ? source?.baseSlop : null) ?? null;
+  const slopLevel = token.slopLevel ?? (token.mergeLevel === 0 ? source?.baseSlopLevel : null) ?? null;
+
+  return stateDto({
+    tokenId,
+    sourceId: token.sourceId ?? null,
+    mergeLevel: token.mergeLevel,
+    stateSource: "indexed-current",
+    embedding,
+    generatedPixels,
+    originalRgba: source?.originalRgba ?? null,
+    slop,
+    slopLevel,
+    includePixels,
+  });
+}
+
 function stateDto(input: {
   tokenId: number;
   sourceId: number | null;
   mergeLevel: number;
+  stateSource: MergeTreeState["stateSource"];
   embedding: Uint8Array | null;
   generatedPixels: Uint8Array | null;
   originalRgba: Uint8Array | null;
@@ -268,6 +308,7 @@ function stateDto(input: {
     tokenId: input.tokenId,
     sourceId: input.sourceId,
     mergeLevel: input.mergeLevel,
+    stateSource: input.stateSource,
     embedding: input.embedding ? bytesToHex(input.embedding) : null,
     slop: input.slop,
     slopLevel: input.slopLevel,

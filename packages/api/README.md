@@ -314,6 +314,12 @@ Full merge tree for the token. This replaces the old flat survivor-only lineage
 response. The tree includes the requested token itself, every donor subtree that
 was merged into it, and the before/after state for each merge step.
 
+For the requested root token, `root.current` is the indexed current token state
+used by `GET /tokens/:id`, so it remains correct for older tokens that went
+through revival flows where embeddings or merge levels reset outside the merge
+tree. Merge-step `before` / `after` values use local merge replay and are best
+read as historical merge math.
+
 Query params:
 
 - `include=pixels`: include `generatedPixels` and `originalRgba` on each state.
@@ -362,6 +368,7 @@ type MergeTreeState = {
   tokenId: number;
   sourceId: number | null;
   mergeLevel: number;
+  stateSource: "source" | "merge-replay" | "indexed-current";
   embedding: string | null;
   slop: number | null;
   slopLevel: number | null;
