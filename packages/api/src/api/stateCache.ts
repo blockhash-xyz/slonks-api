@@ -5,6 +5,7 @@ import { env } from "../env.ts";
 import { setNoStore } from "./cache.ts";
 
 export const TOKEN_STATE_CACHE_SCOPE = "token-state";
+export const INDEXED_NFT_CACHE_SCOPE = "indexed-nfts";
 
 type StateCacheOptions = {
   scope?: string;

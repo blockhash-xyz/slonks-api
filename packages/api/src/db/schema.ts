@@ -93,6 +93,59 @@ export const transfers = pgTable(
   }),
 );
 
+// Generic ERC721 ownership index for adjacent Slonks-universe collections that
+// do not need the heavyweight Slonks render/source tables.
+export const indexedNftCollectionState = pgTable("indexed_nft_collection_state", {
+  collection: text("collection").primaryKey(),
+  contractAddress: text("contract_address").notNull(),
+  startBlock: bigint("start_block", { mode: "bigint" }).notNull(),
+  lastIndexedBlock: bigint("last_indexed_block", { mode: "bigint" }).notNull().default(sql`0`),
+  updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
+});
+
+export const indexedNftTokens = pgTable(
+  "indexed_nft_tokens",
+  {
+    collection: text("collection").notNull(),
+    tokenId: integer("token_id").notNull(),
+    exists: boolean("exists").notNull().default(false),
+    owner: text("owner"),
+    mintedAtBlock: bigint("minted_at_block", { mode: "bigint" }),
+    lastEventBlock: bigint("last_event_block", { mode: "bigint" }),
+    updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
+  },
+  (t) => ({
+    pk: primaryKey({ columns: [t.collection, t.tokenId] }),
+    collectionOwnerIdx: index("indexed_nft_tokens_collection_owner_idx").on(t.collection, t.owner),
+    collectionExistsIdx: index("indexed_nft_tokens_collection_exists_idx").on(t.collection, t.exists),
+  }),
+);
+
+export const indexedNftTransfers = pgTable(
+  "indexed_nft_transfers",
+  {
+    collection: text("collection").notNull(),
+    blockNumber: bigint("block_number", { mode: "bigint" }).notNull(),
+    logIndex: integer("log_index").notNull(),
+    txHash: text("tx_hash").notNull(),
+    tokenId: integer("token_id").notNull(),
+    from: text("from_address").notNull(),
+    to: text("to_address").notNull(),
+    blockTimestamp: timestamp("block_timestamp", { withTimezone: true }).notNull(),
+  },
+  (t) => ({
+    pk: primaryKey({ columns: [t.collection, t.blockNumber, t.logIndex] }),
+    collectionTokenIdx: index("indexed_nft_transfers_collection_token_idx").on(
+      t.collection,
+      t.tokenId,
+      t.blockNumber,
+    ),
+    collectionFromIdx: index("indexed_nft_transfers_collection_from_idx").on(t.collection, t.from, t.blockNumber),
+    collectionToIdx: index("indexed_nft_transfers_collection_to_idx").on(t.collection, t.to, t.blockNumber),
+    collectionBlockIdx: index("indexed_nft_transfers_collection_block_idx").on(t.collection, t.blockNumber),
+  }),
+);
+
 // Current SLOP game claim lifecycle per token. Pending rows are Slonks locked in
 // the active game contract that still need/await a SLOP claim.
 export const slopClaims = pgTable(
@@ -218,6 +271,9 @@ export const voidProofJobs = pgTable(
 export type SourcePunkRow = typeof sourcePunks.$inferSelect;
 export type TokenRow = typeof tokens.$inferSelect;
 export type TransferRow = typeof transfers.$inferSelect;
+export type IndexedNftCollectionStateRow = typeof indexedNftCollectionState.$inferSelect;
+export type IndexedNftTokenRow = typeof indexedNftTokens.$inferSelect;
+export type IndexedNftTransferRow = typeof indexedNftTransfers.$inferSelect;
 export type SlopClaimRow = typeof slopClaims.$inferSelect;
 export type MergeRow = typeof merges.$inferSelect;
 export type CollectionStateRow = typeof collectionState.$inferSelect;

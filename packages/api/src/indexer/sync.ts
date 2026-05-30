@@ -36,6 +36,7 @@ import {
   repairMissingBaseSourceIds,
   refreshTokenRenderFromChain,
 } from "./handlers.ts";
+import { syncIndexedNftLogs } from "./indexedNfts.ts";
 
 const ZERO_ADDR = "0x0000000000000000000000000000000000000000";
 export async function syncOnce(): Promise<void> {
@@ -57,6 +58,7 @@ export async function syncOnce(): Promise<void> {
   if (from > safeLatest) {
     await refreshCollection(safeLatest);
     await syncSlopGameLogs(client, safeLatest);
+    await syncIndexedNftLogs(client, safeLatest);
     return;
   }
 
@@ -93,6 +95,7 @@ export async function syncOnce(): Promise<void> {
 
   await refreshCollection(safeLatest);
   await syncSlopGameLogs(client, safeLatest);
+  await syncIndexedNftLogs(client, safeLatest);
 }
 
 async function processSlonksLogs(logs: Log[]): Promise<boolean> {

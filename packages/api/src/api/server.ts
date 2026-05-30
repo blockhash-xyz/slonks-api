@@ -16,6 +16,7 @@ import { voidProof } from "./routes/voidProof.ts";
 import { voidRoutes } from "./routes/void.ts";
 import { png } from "./routes/png.ts";
 import { revival } from "./routes/revival.ts";
+import { indexedNfts, slopPacks, sloplings } from "./routes/indexedNfts.ts";
 
 export function buildApp() {
   const app = new Hono();
@@ -39,6 +40,9 @@ export function buildApp() {
   app.route("/merge-previews", mergePreviews);
   app.route("/listings", listings);
   app.route("/holders", holders);
+  app.route("/collections", indexedNfts);
+  app.route("/slop-packs", slopPacks);
+  app.route("/sloplings", sloplings);
   app.route("/void", voidRoutes);
   app.route("/void-proof", voidProof);
   app.route("/proofs/void", voidProof);

@@ -36,6 +36,8 @@ https://api.slonks.xyz
 - `False-start SlopGameV2`: `0x886612a7a8dba8bbced8f86d26c1114857ccd9da`
 - `SlopDutchAuctionExtension`: `0xf79822c2331db455087b51b6c97e4064138bb635`
 - `SlopSignedDutchAuctionExtension`: `0x9454262f710c04db1c5a1e016a3cc038857660a5`
+- `SlopPacks`: `0xcd1ac22e5175f1d5bb5b83e882e4b0311e2394e8`
+- `Sloplings`: `0xd449c4d5bb924384bbd31d2484f29c1b2b4a5108`
 - `HonkVerifier`: `0x5cbe9cbedc27dd4f082119586f5d924645064eb3`
 - `CryptoPunksData`: `0x16f5a35647d6f03d5d3da7b35409d65ba03af3b2`
 
@@ -48,6 +50,8 @@ https://api.slonks.xyz
 - Active `SlopGameV2`, `SlopFixedPriceVoidExtension`, and legacy claim events:
   Slonks locked for SLOP, unlocked, claimed, protocol-voided, bought-and-voided,
   fixed-price void price initialization, and exact void purchases.
+- `SlopPacks` and `Sloplings` `Transfer`: mint, burn, transfer, and current
+  owner state for those ERC721C collections.
 
 ## What It Precomputes
 
@@ -85,7 +89,7 @@ locally from the bundled model weights.
   prover's short in-process cache for repeated work while a machine is warm.
 - Cacheable shared `GET` responses include `Cache-Control`,
   `CDN-Cache-Control`, `ETag`, `Vary: Origin`, and `X-Slonks-Cache` headers.
-- Stateful token, owner, holder, pending-claim, lineage/history, and PNG
+- Stateful token, owner, holder, indexed NFT ownership, pending-claim, lineage/history, and PNG
   responses use `no-store` externally but are cached in Redis behind a shared
   cache version.
 - Errors are shaped like `{ "error": "message" }`.
@@ -116,9 +120,9 @@ Current shared-cache TTLs:
 `X-Slonks-Cache` is `MISS`, `HIT`, or `BYPASS` for API-managed caches.
 Health checks and upstream listing errors use `no-store`.
 Direct token snapshots, token lists, bulk token snapshots, token
-lineage/history, owner tokens/summary, holders, token PNG images, pending void
-claims, void inventory, token-derived distributions, all void proof endpoints,
-and legacy revival claim signatures use
+lineage/history, owner tokens/summary, holders, Slop Packs/Sloplings ownership
+views, token PNG images, pending void claims, void inventory, token-derived
+distributions, all void proof endpoints, and legacy revival claim signatures use
 `no-store` externally. Proof bytes are stored in Postgres by token state so a
 stopped prover machine does not lose already-generated proofs. The prover
 process also keeps a short in-memory cache while it is warm.
@@ -181,6 +185,23 @@ Add `include=pixels` to include `generatedPixels` and `originalRgba`.
 Claim-custodied Slonks report `status: "locked"` while their SLOP claim is
 pending and `status: "voided"` after the claim/void is complete, even though the
 ERC721 may still be owned by a game contract.
+
+### Indexed NFT Token
+
+Returned by the Slop Packs and Sloplings ownership endpoints.
+
+```ts
+type IndexedNftToken = {
+  collection: "slop-packs" | "sloplings";
+  tokenId: number;
+  status: "active" | "burned";
+  exists: boolean;
+  owner: string | null;
+  mintedAtBlock: number | null;
+  lastEventBlock: number | null;
+  updatedAt: string;
+};
+```
 
 ## API Reference
 
@@ -462,6 +483,142 @@ Returns:
   sort: string;
   hasMore: boolean;
   nextPage: number | null;
+}
+```
+
+### `GET /collections`
+
+Indexed non-Slonks NFT collections.
+
+Returns:
+
+```ts
+{
+  chainId: 1;
+  collections: Array<{
+    slug: "slop-packs" | "sloplings";
+    name: string;
+    symbol: string;
+    contract: string;
+    startBlock: number;
+    lastIndexedBlock: number;
+    activeCount: number;
+  }>;
+}
+```
+
+### `GET /collections/:collection/tokens`
+
+Current owners for an indexed ERC721 collection.
+
+Supported `:collection` values:
+
+- `slop-packs`
+- `sloplings`
+
+Aliases:
+
+- `GET /slop-packs`
+- `GET /slop-packs/tokens`
+- `GET /sloplings`
+- `GET /sloplings/tokens`
+
+Query params:
+
+- `owner`: filter to a holder address.
+- `page`: default `1`.
+- `limit`: default `50`, max `200`.
+
+Example:
+
+```bash
+curl -sS "https://api.slonks.xyz/slop-packs?limit=100"
+curl -sS "https://api.slonks.xyz/sloplings?owner=0x2052051a0474fb0b98283b3f38c13b0b0b6a3677"
+```
+
+Returns:
+
+```ts
+{
+  chainId: 1;
+  collection: {
+    slug: "slop-packs" | "sloplings";
+    name: string;
+    symbol: string;
+    contract: string;
+    startBlock: number;
+    lastIndexedBlock: number;
+  };
+  owner?: string;
+  count: number;
+  page: number;
+  limit: number;
+  hasMore: boolean;
+  nextPage: number | null;
+  items: IndexedNftToken[];
+}
+```
+
+### `GET /collections/:collection/tokens/:id`
+
+Single indexed ERC721 token owner/status.
+
+Aliases:
+
+- `GET /slop-packs/:id`
+- `GET /slop-packs/tokens/:id`
+- `GET /sloplings/:id`
+- `GET /sloplings/tokens/:id`
+
+Returns:
+
+```ts
+{
+  chainId: 1;
+  collection: {
+    slug: "slop-packs" | "sloplings";
+    name: string;
+    symbol: string;
+    contract: string;
+    startBlock: number;
+    lastIndexedBlock: number;
+  };
+  token: IndexedNftToken;
+}
+```
+
+### `GET /collections/:collection/holders`
+
+Holder counts for an indexed ERC721 collection.
+
+Aliases:
+
+- `GET /slop-packs/holders`
+- `GET /sloplings/holders`
+
+Query params:
+
+- `page`: default `1`.
+- `limit`: default `50`, max `200`.
+
+Returns:
+
+```ts
+{
+  chainId: 1;
+  collection: {
+    slug: "slop-packs" | "sloplings";
+    name: string;
+    symbol: string;
+    contract: string;
+    startBlock: number;
+    lastIndexedBlock: number;
+  };
+  page: number;
+  limit: number;
+  hasMore: boolean;
+  nextPage: number | null;
+  items: Array<{ owner: string | null; count: number }>;
 }
 ```
 

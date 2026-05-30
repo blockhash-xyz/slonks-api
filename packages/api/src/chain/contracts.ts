@@ -33,6 +33,8 @@ export const CONTRACTS = {
   dutchAuctionExtension: "0xf79822c2331db455087b51b6c97e4064138bb635" as Address,
   signedDutchAuctionExtension: "0x9454262f710c04db1c5a1e016a3cc038857660a5" as Address,
   oldGameSweepExtension: "0xabfe4e6dbcbf1468e6e50c2c2223a91eb8c43b18" as Address,
+  slopPacks: "0xcd1ac22e5175f1d5bb5b83e882e4b0311e2394e8" as Address,
+  sloplings: "0xd449c4d5bb924384bbd31d2484f29c1b2b4a5108" as Address,
   cryptoPunksData: "0x16f5a35647d6f03d5d3da7b35409d65ba03af3b2" as Address,
 } as const;
 
@@ -63,8 +65,34 @@ export function isKnownSlopGameAddress(address: string | null | undefined): bool
 // If you don't know it offhand, set START_BLOCK in .env to the block of the first
 // Slonks tx and the indexer will start there.
 export const SLONKS_DEPLOY_BLOCK = 24_998_760n;
+export const SLOP_PACKS_DEPLOY_BLOCK = 25_200_293n;
+export const SLOPLINGS_DEPLOY_BLOCK = 25_197_167n;
 
 export const MAX_SUPPLY = 10_000;
+
+export const INDEXED_NFT_COLLECTIONS = [
+  {
+    slug: "slop-packs",
+    name: "Slop Packs",
+    symbol: "SLOPPACK",
+    address: CONTRACTS.slopPacks,
+    startBlock: SLOP_PACKS_DEPLOY_BLOCK,
+  },
+  {
+    slug: "sloplings",
+    name: "Sloplings",
+    symbol: "SLOPLINGS",
+    address: CONTRACTS.sloplings,
+    startBlock: SLOPLINGS_DEPLOY_BLOCK,
+  },
+] as const;
+
+export type IndexedNftCollection = (typeof INDEXED_NFT_COLLECTIONS)[number];
+export type IndexedNftCollectionSlug = IndexedNftCollection["slug"];
+
+export function indexedNftCollectionBySlug(slug: string): IndexedNftCollection | null {
+  return INDEXED_NFT_COLLECTIONS.find((collection) => collection.slug === slug) ?? null;
+}
 
 // renderEmbeddingPixels eth_call is ~140M gas. Alchemy accepts it under 550M.
 export const ETH_CALL_GAS = 600_000_000n;

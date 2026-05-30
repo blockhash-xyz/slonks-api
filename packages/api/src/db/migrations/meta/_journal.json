@@ -50,6 +50,13 @@
       "when": 1778440800000,
       "tag": "0006_backfill_claim_extension_events",
       "breakpoints": true
+    },
+    {
+      "idx": 7,
+      "version": "7",
+      "when": 1779235200000,
+      "tag": "0007_indexed_nft_collections",
+      "breakpoints": true
     }
   ]
 }
