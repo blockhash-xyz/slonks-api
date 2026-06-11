@@ -100,8 +100,6 @@ type TokenListFilters = {
   status: TokenStatusFilter;
   careState: SloplingCareState | null;
   traitFilters: TraitFilter[];
-  minRank: number | null;
-  maxRank: number | null;
 };
 
 async function listCollectionTokens(c: Context, slug: string) {
@@ -133,14 +131,6 @@ async function listCollectionTokens(c: Context, slug: string) {
     return c.json({ error: "trait filters are only supported for sloplings" }, 400);
   }
 
-  const minRank = parseOptionalIntParam(sp.minRank, "minRank", 1, SLOPLING_MAX_RANK);
-  const maxRank = parseOptionalIntParam(sp.maxRank, "maxRank", 1, SLOPLING_MAX_RANK);
-  if (typeof minRank === "string") return c.json({ error: minRank }, 400);
-  if (typeof maxRank === "string") return c.json({ error: maxRank }, 400);
-  if ((minRank != null || maxRank != null) && collection.slug !== "sloplings") {
-    return c.json({ error: "rank filters are only supported for sloplings" }, 400);
-  }
-
   const result = await readThroughStateCache(
     c,
     `indexed-nft:${collection.slug}:tokens`,
@@ -150,8 +140,6 @@ async function listCollectionTokens(c: Context, slug: string) {
         status,
         careState,
         traitFilters,
-        minRank,
-        maxRank,
       });
       const orderBy = collectionTokenOrder(sp.sort);
       const [state, [countRow], rows] = await Promise.all([
@@ -178,8 +166,6 @@ async function listCollectionTokens(c: Context, slug: string) {
         status,
         careState: careState ?? undefined,
         traits: traitFilters.length > 0 ? traitFilters : undefined,
-        minRank: minRank ?? undefined,
-        maxRank: maxRank ?? undefined,
         count: countRow?.total ?? 0,
         page,
         limit,
@@ -332,8 +318,6 @@ async function getCollectionToken(
   return c.json(result);
 }
 
-const SLOPLING_MAX_RANK = 10_000;
-
 function collectionTokenWhere(collection: IndexedNftCollectionSlug, options: TokenListFilters): SQL {
   const filters: SQL[] = [eq(indexedNftTokens.collection, collection)];
   switch (options.status) {
@@ -361,8 +345,6 @@ function collectionTokenWhere(collection: IndexedNftCollectionSlug, options: Tok
   }
   if (options.ownerLower) filters.push(eq(indexedNftTokens.owner, options.ownerLower));
   if (options.careState) filters.push(sloplingCareStateFilter(options.careState));
-  if (options.minRank != null) filters.push(sql`${indexedNftTokens.rarityRank} >= ${options.minRank}`);
-  if (options.maxRank != null) filters.push(sql`${indexedNftTokens.rarityRank} <= ${options.maxRank}`);
   for (const trait of options.traitFilters) {
     filters.push(sql`
       exists (
@@ -384,12 +366,6 @@ function collectionTokenOrder(rawSort: string | undefined): SQL[] {
   switch (rawSort) {
     case "id_desc":
       return [desc(indexedNftTokens.tokenId)];
-    case "rarity_rank_asc":
-    case "rank_asc":
-      return [sql`${indexedNftTokens.rarityRank} asc nulls last`, asc(indexedNftTokens.tokenId)];
-    case "rarity_rank_desc":
-    case "rank_desc":
-      return [sql`${indexedNftTokens.rarityRank} desc nulls last`, asc(indexedNftTokens.tokenId)];
     default:
       return [asc(indexedNftTokens.tokenId)];
   }
@@ -476,8 +452,6 @@ function tokenDto(
     name: row.name,
     image: row.image,
     attributes,
-    rarityScore: row.rarityScore,
-    rarityRank: row.rarityRank,
     careState,
     paidThrough: row.sloplingPaidThrough?.toISOString() ?? null,
     isImmortal: row.collection === "sloplings" ? row.sloplingImmortal : undefined,
@@ -599,18 +573,6 @@ function parseIntParam(
   max: number,
 ): number | string {
   if (raw == null || raw === "") return fallback;
-  const value = Number(raw);
-  if (!Number.isInteger(value) || value < min || value > max) return `invalid ${name}`;
-  return value;
-}
-
-function parseOptionalIntParam(
-  raw: string | undefined,
-  name: string,
-  min: number,
-  max: number,
-): number | null | string {
-  if (raw == null || raw === "") return null;
   const value = Number(raw);
   if (!Number.isInteger(value) || value < min || value > max) return `invalid ${name}`;
   return value;

@@ -79,9 +79,8 @@ For merged tokens, the indexer stores the cumulative embedding and re-renders pi
 locally from the bundled model weights.
 
 For Sloplings, the indexer backfills static metadata from the collection CDN,
-stores filterable traits, and computes a deterministic rarity score/rank from
-static trait frequencies across token ids `1..10000`. Dynamic care state is not
-part of the rank.
+stores filterable traits for token ids `1..10000`, and derives dynamic care
+state from on-chain feed/revive/immortalize events.
 
 ## API Conventions
 
@@ -212,8 +211,6 @@ type IndexedNftToken = {
   name: string | null;
   image: string | null;
   attributes: Array<{ trait_type: string; value: string }>;
-  rarityScore: number | null; // Sloplings only
-  rarityRank: number | null; // Sloplings only
   careState?: "alive" | "starving" | "dead" | "immortal" | null; // Sloplings only
   paidThrough?: string | null; // Sloplings only
   isImmortal?: boolean; // Sloplings only
@@ -575,9 +572,7 @@ Query params:
 - `trait`: Sloplings only; repeatable, formatted as `Trait Type:Value` or
   `Trait Type=Value`.
 - `traitType` + `traitValue`: Sloplings only; alternate single trait filter.
-- `minRank` / `maxRank`: Sloplings only; rarity rank filter.
-- `sort`: `id_asc` default, `id_desc`, `rarity_rank_asc`, or
-  `rarity_rank_desc`.
+- `sort`: `id_asc` default or `id_desc`.
 - `include=metadata`: include the stored metadata object with dynamic Slopling
   state attributes patched into the returned `attributes` field.
 - `page`: default `1`.
@@ -589,7 +584,7 @@ Example:
 curl -sS "https://api.slonks.xyz/slop-packs?limit=100"
 curl -sS "https://api.slonks.xyz/slop-packs?status=opened&limit=25"
 curl -sS "https://api.slonks.xyz/sloplings?owner=0x2052051a0474fb0b98283b3f38c13b0b0b6a3677"
-curl -sS "https://api.slonks.xyz/sloplings?careState=alive&trait=Body:Royal%20Purple&sort=rarity_rank_asc"
+curl -sS "https://api.slonks.xyz/sloplings?careState=alive&trait=Body:Royal%20Purple"
 ```
 
 Returns:
@@ -610,8 +605,6 @@ Returns:
   status: string;
   careState?: "alive" | "starving" | "dead" | "immortal";
   traits?: Array<{ traitType: string; value: string }>;
-  minRank?: number;
-  maxRank?: number;
   count: number;
   page: number;
   limit: number;

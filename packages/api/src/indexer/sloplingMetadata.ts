@@ -1,4 +1,4 @@
-import { and, eq, sql } from "drizzle-orm";
+import { and, eq } from "drizzle-orm";
 import {
   SLOPLING_MAX_SUPPLY,
   SLOPLING_METADATA_BASE,
@@ -20,7 +20,6 @@ const COLLECTION: IndexedNftCollectionSlug = "sloplings";
 const FIRST_TOKEN_ID = 1;
 const LAST_TOKEN_ID = SLOPLING_MAX_SUPPLY;
 const CONCURRENCY = 8;
-const RANK_BATCH_SIZE = 500;
 
 export async function backfillSloplingMetadata(): Promise<void> {
   const missing = await missingSloplingMetadataIds();
@@ -36,8 +35,6 @@ export async function backfillSloplingMetadata(): Promise<void> {
     });
     await bumpApiCacheVersion(INDEXED_NFT_CACHE_SCOPE);
   }
-
-  await refreshSloplingRarityRanks();
 }
 
 async function missingSloplingMetadataIds(): Promise<number[]> {
@@ -114,73 +111,6 @@ function normalizeStaticAttributes(attributes: NonNullable<SloplingMetadata["att
     }))
     .filter((attribute) => attribute.trait_type !== "" && attribute.value !== "")
     .filter((attribute) => attribute.trait_type.toLowerCase() !== "state");
-}
-
-async function refreshSloplingRarityRanks(): Promise<void> {
-  const [coverage] = await db
-    .select({ count: sql<number>`count(distinct ${indexedNftAttributes.tokenId})::int` })
-    .from(indexedNftAttributes)
-    .where(eq(indexedNftAttributes.collection, COLLECTION));
-  if ((coverage?.count ?? 0) < SLOPLING_MAX_SUPPLY) {
-    console.log(`slopling rarity rank skipped: ${coverage?.count ?? 0}/${SLOPLING_MAX_SUPPLY} metadata rows ready`);
-    return;
-  }
-
-  const [rankCoverage] = await db
-    .select({ count: sql<number>`count(*)::int` })
-    .from(indexedNftTokens)
-    .where(and(eq(indexedNftTokens.collection, COLLECTION), sql`${indexedNftTokens.rarityRank} is not null`));
-  if ((rankCoverage?.count ?? 0) >= SLOPLING_MAX_SUPPLY) return;
-
-  const rows = await db
-    .select({
-      tokenId: indexedNftAttributes.tokenId,
-      traitType: indexedNftAttributes.traitType,
-      value: indexedNftAttributes.value,
-    })
-    .from(indexedNftAttributes)
-    .where(eq(indexedNftAttributes.collection, COLLECTION));
-
-  const frequencies = new Map<string, number>();
-  for (const row of rows) {
-    const key = rarityKey(row.traitType, row.value);
-    frequencies.set(key, (frequencies.get(key) ?? 0) + 1);
-  }
-
-  const scores = new Map<number, number>();
-  for (const row of rows) {
-    const frequency = frequencies.get(rarityKey(row.traitType, row.value)) ?? 1;
-    scores.set(row.tokenId, (scores.get(row.tokenId) ?? 0) + SLOPLING_MAX_SUPPLY / frequency);
-  }
-
-  const ranked = [...scores.entries()]
-    .map(([tokenId, score]) => ({ tokenId, score }))
-    .sort((a, b) => b.score - a.score || a.tokenId - b.tokenId)
-    .map((row, index) => ({ ...row, rank: index + 1 }));
-
-  for (let i = 0; i < ranked.length; i += RANK_BATCH_SIZE) {
-    const chunk = ranked.slice(i, i + RANK_BATCH_SIZE);
-    await db.execute(sql`
-      update ${indexedNftTokens} as t
-      set
-        rarity_score = v.rarity_score,
-        rarity_rank = v.rarity_rank,
-        updated_at = now()
-      from (values ${sql.join(
-        chunk.map((row) => sql`(${row.tokenId}, ${row.score}, ${row.rank})`),
-        sql`, `,
-      )}) as v(token_id, rarity_score, rarity_rank)
-      where t.collection = ${COLLECTION}
-        and t.token_id = v.token_id
-    `);
-  }
-
-  await bumpApiCacheVersion(INDEXED_NFT_CACHE_SCOPE);
-  console.log(`slopling rarity rank refreshed for ${ranked.length} tokens`);
-}
-
-function rarityKey(traitType: string, value: string): string {
-  return `${traitType}\u0000${value}`;
 }
 
 async function runConcurrent<T>(

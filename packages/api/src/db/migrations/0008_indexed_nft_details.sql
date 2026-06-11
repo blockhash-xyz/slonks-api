@@ -7,8 +7,6 @@ ALTER TABLE "indexed_nft_tokens"
   ADD COLUMN IF NOT EXISTS "image" text,
   ADD COLUMN IF NOT EXISTS "metadata_json" jsonb,
   ADD COLUMN IF NOT EXISTS "attributes_json" jsonb,
-  ADD COLUMN IF NOT EXISTS "rarity_score" double precision,
-  ADD COLUMN IF NOT EXISTS "rarity_rank" integer,
   ADD COLUMN IF NOT EXISTS "slopling_paid_through" timestamp with time zone,
   ADD COLUMN IF NOT EXISTS "slopling_immortal" boolean DEFAULT false NOT NULL,
   ADD COLUMN IF NOT EXISTS "pack_request_status" smallint,
@@ -35,8 +33,6 @@ CREATE TABLE IF NOT EXISTS "indexed_nft_attributes" (
   )
 );
 
-CREATE INDEX IF NOT EXISTS "indexed_nft_tokens_collection_rarity_idx"
-  ON "indexed_nft_tokens" ("collection", "rarity_rank");
 CREATE INDEX IF NOT EXISTS "indexed_nft_tokens_collection_pack_status_idx"
   ON "indexed_nft_tokens" ("collection", "pack_request_status");
 CREATE INDEX IF NOT EXISTS "indexed_nft_attributes_collection_trait_value_idx"
