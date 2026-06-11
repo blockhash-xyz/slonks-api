@@ -102,6 +102,112 @@ export const erc721OwnershipAbi = [
   },
 ] as const;
 
+export const sloplingsAbi = [
+  {
+    type: "function",
+    name: "tokenURI",
+    stateMutability: "view",
+    inputs: [{ name: "tokenId", type: "uint256" }],
+    outputs: [{ type: "string" }],
+  },
+  {
+    type: "function",
+    name: "paidThrough",
+    stateMutability: "view",
+    inputs: [{ name: "tokenId", type: "uint256" }],
+    outputs: [{ type: "uint256" }],
+  },
+  {
+    type: "function",
+    name: "isImmortal",
+    stateMutability: "view",
+    inputs: [{ name: "tokenId", type: "uint256" }],
+    outputs: [{ type: "bool" }],
+  },
+  {
+    type: "function",
+    name: "stateOf",
+    stateMutability: "view",
+    inputs: [{ name: "tokenId", type: "uint256" }],
+    outputs: [{ type: "uint8" }],
+  },
+  {
+    type: "function",
+    name: "feedingPeriodsRequired",
+    stateMutability: "view",
+    inputs: [{ name: "tokenId", type: "uint256" }],
+    outputs: [{ type: "uint256" }],
+  },
+  {
+    type: "event",
+    name: "Fed",
+    inputs: [
+      { name: "tokenId", type: "uint256", indexed: true },
+      { name: "payer", type: "address", indexed: true },
+      { name: "periods", type: "uint256", indexed: false },
+      { name: "amount", type: "uint256", indexed: false },
+      { name: "paidThrough", type: "uint256", indexed: false },
+    ],
+    anonymous: false,
+  },
+  {
+    type: "event",
+    name: "Revived",
+    inputs: [
+      { name: "tokenId", type: "uint256", indexed: true },
+      { name: "payer", type: "address", indexed: true },
+      { name: "amount", type: "uint256", indexed: false },
+      { name: "paidThrough", type: "uint256", indexed: false },
+    ],
+    anonymous: false,
+  },
+  {
+    type: "event",
+    name: "Immortalized",
+    inputs: [
+      { name: "tokenId", type: "uint256", indexed: true },
+      { name: "payer", type: "address", indexed: true },
+      { name: "amount", type: "uint256", indexed: false },
+    ],
+    anonymous: false,
+  },
+] as const;
+
+export const seasonOneControllerAbi = [
+  {
+    type: "event",
+    name: "OpenRequested",
+    inputs: [
+      { name: "packTokenId", type: "uint256", indexed: true },
+      { name: "beneficiary", type: "address", indexed: true },
+      { name: "entropyBlock", type: "uint64", indexed: false },
+    ],
+    anonymous: false,
+  },
+  {
+    type: "event",
+    name: "OpenSettled",
+    inputs: [
+      { name: "packTokenId", type: "uint256", indexed: true },
+      { name: "beneficiary", type: "address", indexed: true },
+      { name: "chosen", type: "uint256", indexed: false },
+      { name: "position", type: "uint256", indexed: false },
+    ],
+    anonymous: false,
+  },
+  {
+    type: "event",
+    name: "PackOpened",
+    inputs: [
+      { name: "packTokenId", type: "uint256", indexed: true },
+      { name: "beneficiary", type: "address", indexed: true },
+      { name: "nftContract", type: "address", indexed: true },
+      { name: "tokenId", type: "uint256", indexed: false },
+    ],
+    anonymous: false,
+  },
+] as const;
+
 export const slonksRendererAbi = [
   {
     type: "function",

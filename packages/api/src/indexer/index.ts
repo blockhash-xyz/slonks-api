@@ -3,6 +3,7 @@ import { db, close as closeDb } from "../db/client.ts";
 import { collectionState } from "../db/schema.ts";
 import { env } from "../env.ts";
 import { backfillSourcePunks } from "./sources.ts";
+import { backfillSloplingMetadata } from "./sloplingMetadata.ts";
 import { syncOnce } from "./sync.ts";
 
 async function ensureCollectionRow() {
@@ -20,6 +21,9 @@ async function main() {
   // parallel with the event sync.
   void backfillSourcePunks().catch((err) => {
     console.error("source backfill error:", err);
+  });
+  void backfillSloplingMetadata().catch((err) => {
+    console.error("slopling metadata backfill error:", err);
   });
 
   console.log(`indexer starting; sync interval ${env.SYNC_INTERVAL_MS}ms`);

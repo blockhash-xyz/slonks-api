@@ -52,6 +52,12 @@ https://api.slonks.xyz
   fixed-price void price initialization, and exact void purchases.
 - `SlopPacks` and `Sloplings` `Transfer`: mint, burn, transfer, and current
   owner state for those ERC721C collections.
+- `Sloplings` care events: `Fed`, `Revived`, and `Immortalized`; the API
+  stores `paidThrough` / `isImmortal` and derives `alive`, `starving`, `dead`,
+  or `immortal` at request time.
+- `SlopPacks` Season One controller events: `OpenRequested`, `OpenSettled`,
+  and `PackOpened`; the API stores pack lifecycle state plus revealed prize
+  collection/token contents.
 
 ## What It Precomputes
 
@@ -71,6 +77,11 @@ After reveal, token `sourceId` is computed as:
 
 For merged tokens, the indexer stores the cumulative embedding and re-renders pixels
 locally from the bundled model weights.
+
+For Sloplings, the indexer backfills static metadata from the collection CDN,
+stores filterable traits, and computes a deterministic rarity score/rank from
+static trait frequencies across token ids `1..10000`. Dynamic care state is not
+part of the rank.
 
 ## API Conventions
 
@@ -197,6 +208,35 @@ type IndexedNftToken = {
   status: "active" | "burned";
   exists: boolean;
   owner: string | null;
+  tokenUri: string | null;
+  name: string | null;
+  image: string | null;
+  attributes: Array<{ trait_type: string; value: string }>;
+  rarityScore: number | null; // Sloplings only
+  rarityRank: number | null; // Sloplings only
+  careState?: "alive" | "starving" | "dead" | "immortal" | null; // Sloplings only
+  paidThrough?: string | null; // Sloplings only
+  isImmortal?: boolean; // Sloplings only
+  feedingPeriodsRequired?: number | null; // Sloplings only
+  lifecycleState?: "unopened" | "pending" | "settled" | "delivered" | "burned" | null; // Slop Packs only
+  openRequest?: {
+    status: "unopened" | "pending" | "settled" | "delivered" | "burned" | null;
+    entropyBlock: string | null;
+    position: string | null;
+    chosen: string | null;
+    beneficiary: string | null;
+  };
+  openedAsset?: {
+    collection: string;
+    collectionName: string | null;
+    tokenId: string | null;
+    beneficiary: string | null;
+    blockNumber: string | null;
+    logIndex: number | null;
+    txHash: string | null;
+    timestamp: string | null;
+  };
+  metadata?: Record<string, unknown> | null; // include=metadata
   mintedAtBlock: number | null;
   lastEventBlock: number | null;
   updatedAt: string;
@@ -502,6 +542,7 @@ Returns:
     contract: string;
     startBlock: number;
     lastIndexedBlock: number;
+    extendedLastIndexedBlock: number;
     activeCount: number;
   }>;
 }
@@ -526,6 +567,19 @@ Aliases:
 Query params:
 
 - `owner`: filter to a holder address.
+- `status`: default `active`; supported everywhere: `active`, `all`, `burned`.
+  Slop Packs also support `unopened`, `pending`, `settled`, `opened`, and
+  `delivered` (`opened` is an alias for the contract's delivered state).
+- `careState`: Sloplings only; `alive`, `starving`, `dead`, or `immortal`.
+  `status=alive|starving|dead|immortal` also works as a Sloplings alias.
+- `trait`: Sloplings only; repeatable, formatted as `Trait Type:Value` or
+  `Trait Type=Value`.
+- `traitType` + `traitValue`: Sloplings only; alternate single trait filter.
+- `minRank` / `maxRank`: Sloplings only; rarity rank filter.
+- `sort`: `id_asc` default, `id_desc`, `rarity_rank_asc`, or
+  `rarity_rank_desc`.
+- `include=metadata`: include the stored metadata object with dynamic Slopling
+  state attributes patched into the returned `attributes` field.
 - `page`: default `1`.
 - `limit`: default `50`, max `200`.
 
@@ -533,7 +587,9 @@ Example:
 
 ```bash
 curl -sS "https://api.slonks.xyz/slop-packs?limit=100"
+curl -sS "https://api.slonks.xyz/slop-packs?status=opened&limit=25"
 curl -sS "https://api.slonks.xyz/sloplings?owner=0x2052051a0474fb0b98283b3f38c13b0b0b6a3677"
+curl -sS "https://api.slonks.xyz/sloplings?careState=alive&trait=Body:Royal%20Purple&sort=rarity_rank_asc"
 ```
 
 Returns:
@@ -548,14 +604,49 @@ Returns:
     contract: string;
     startBlock: number;
     lastIndexedBlock: number;
+    extendedLastIndexedBlock: number;
   };
   owner?: string;
+  status: string;
+  careState?: "alive" | "starving" | "dead" | "immortal";
+  traits?: Array<{ traitType: string; value: string }>;
+  minRank?: number;
+  maxRank?: number;
   count: number;
   page: number;
   limit: number;
   hasMore: boolean;
   nextPage: number | null;
   items: IndexedNftToken[];
+}
+```
+
+### `GET /collections/:collection/traits`
+
+Filter menu data for Slopling traits.
+
+Aliases:
+
+- `GET /sloplings/traits`
+
+Returns:
+
+```ts
+{
+  chainId: 1;
+  collection: {
+    slug: "sloplings";
+    name: string;
+    symbol: string;
+    contract: string;
+    startBlock: number;
+    lastIndexedBlock: number;
+    extendedLastIndexedBlock: number;
+  };
+  traits: Array<{
+    traitType: string;
+    values: Array<{ value: string; count: number }>;
+  }>;
 }
 ```
 
@@ -582,6 +673,7 @@ Returns:
     contract: string;
     startBlock: number;
     lastIndexedBlock: number;
+    extendedLastIndexedBlock: number;
   };
   token: IndexedNftToken;
 }

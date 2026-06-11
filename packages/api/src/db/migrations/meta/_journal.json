@@ -57,6 +57,13 @@
       "when": 1779235200000,
       "tag": "0007_indexed_nft_collections",
       "breakpoints": true
+    },
+    {
+      "idx": 8,
+      "version": "7",
+      "when": 1781136000000,
+      "tag": "0008_indexed_nft_details",
+      "breakpoints": true
     }
   ]
 }

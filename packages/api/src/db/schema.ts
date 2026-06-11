@@ -2,6 +2,7 @@ import {
   bigint,
   boolean,
   customType,
+  doublePrecision,
   index,
   integer,
   jsonb,
@@ -100,6 +101,7 @@ export const indexedNftCollectionState = pgTable("indexed_nft_collection_state",
   contractAddress: text("contract_address").notNull(),
   startBlock: bigint("start_block", { mode: "bigint" }).notNull(),
   lastIndexedBlock: bigint("last_indexed_block", { mode: "bigint" }).notNull().default(sql`0`),
+  extendedLastIndexedBlock: bigint("extended_last_indexed_block", { mode: "bigint" }).notNull().default(sql`0`),
   updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
 });
 
@@ -112,12 +114,56 @@ export const indexedNftTokens = pgTable(
     owner: text("owner"),
     mintedAtBlock: bigint("minted_at_block", { mode: "bigint" }),
     lastEventBlock: bigint("last_event_block", { mode: "bigint" }),
+    tokenUri: text("token_uri"),
+    name: text("name"),
+    image: text("image"),
+    metadataJson: jsonb("metadata_json").$type<Record<string, unknown>>(),
+    attributesJson: jsonb("attributes_json").$type<Array<{ trait_type: string; value: string }>>(),
+    rarityScore: doublePrecision("rarity_score"),
+    rarityRank: integer("rarity_rank"),
+    sloplingPaidThrough: timestamp("slopling_paid_through", { withTimezone: true }),
+    sloplingImmortal: boolean("slopling_immortal").notNull().default(false),
+    packRequestStatus: smallint("pack_request_status"),
+    packEntropyBlock: bigint("pack_entropy_block", { mode: "bigint" }),
+    packPosition: bigint("pack_position", { mode: "bigint" }),
+    packChosen: bigint("pack_chosen", { mode: "bigint" }),
+    packBeneficiary: text("pack_beneficiary"),
+    packOpenedNftContract: text("pack_opened_nft_contract"),
+    packOpenedTokenId: text("pack_opened_token_id"),
+    packOpenedAtBlock: bigint("pack_opened_at_block", { mode: "bigint" }),
+    packOpenedAtLogIndex: integer("pack_opened_at_log_index"),
+    packOpenedTxHash: text("pack_opened_tx_hash"),
+    packOpenedAtTimestamp: timestamp("pack_opened_at_timestamp", { withTimezone: true }),
     updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
   },
   (t) => ({
     pk: primaryKey({ columns: [t.collection, t.tokenId] }),
     collectionOwnerIdx: index("indexed_nft_tokens_collection_owner_idx").on(t.collection, t.owner),
     collectionExistsIdx: index("indexed_nft_tokens_collection_exists_idx").on(t.collection, t.exists),
+    collectionRarityIdx: index("indexed_nft_tokens_collection_rarity_idx").on(t.collection, t.rarityRank),
+    collectionPackStatusIdx: index("indexed_nft_tokens_collection_pack_status_idx").on(
+      t.collection,
+      t.packRequestStatus,
+    ),
+  }),
+);
+
+export const indexedNftAttributes = pgTable(
+  "indexed_nft_attributes",
+  {
+    collection: text("collection").notNull(),
+    tokenId: integer("token_id").notNull(),
+    traitType: text("trait_type").notNull(),
+    value: text("value").notNull(),
+  },
+  (t) => ({
+    pk: primaryKey({ columns: [t.collection, t.tokenId, t.traitType] }),
+    collectionTraitValueIdx: index("indexed_nft_attributes_collection_trait_value_idx").on(
+      t.collection,
+      t.traitType,
+      t.value,
+    ),
+    collectionTokenIdx: index("indexed_nft_attributes_collection_token_idx").on(t.collection, t.tokenId),
   }),
 );
 
@@ -273,6 +319,7 @@ export type TokenRow = typeof tokens.$inferSelect;
 export type TransferRow = typeof transfers.$inferSelect;
 export type IndexedNftCollectionStateRow = typeof indexedNftCollectionState.$inferSelect;
 export type IndexedNftTokenRow = typeof indexedNftTokens.$inferSelect;
+export type IndexedNftAttributeRow = typeof indexedNftAttributes.$inferSelect;
 export type IndexedNftTransferRow = typeof indexedNftTransfers.$inferSelect;
 export type SlopClaimRow = typeof slopClaims.$inferSelect;
 export type MergeRow = typeof merges.$inferSelect;

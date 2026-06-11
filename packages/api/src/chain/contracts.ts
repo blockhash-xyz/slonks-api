@@ -35,6 +35,8 @@ export const CONTRACTS = {
   oldGameSweepExtension: "0xabfe4e6dbcbf1468e6e50c2c2223a91eb8c43b18" as Address,
   slopPacks: "0xcd1ac22e5175f1d5bb5b83e882e4b0311e2394e8" as Address,
   sloplings: "0xd449c4d5bb924384bbd31d2484f29c1b2b4a5108" as Address,
+  slopPacksSeasonState: "0x862430c7d7fddeff2499562ccf1a4468939a5357" as Address,
+  slopPacksSeasonController: "0x24a4fb2553b3dc596065e37f1d1d78085b216abd" as Address,
   cryptoPunksData: "0x16f5a35647d6f03d5d3da7b35409d65ba03af3b2" as Address,
 } as const;
 
@@ -67,6 +69,7 @@ export function isKnownSlopGameAddress(address: string | null | undefined): bool
 export const SLONKS_DEPLOY_BLOCK = 24_998_760n;
 export const SLOP_PACKS_DEPLOY_BLOCK = 25_200_293n;
 export const SLOPLINGS_DEPLOY_BLOCK = 25_197_167n;
+export const SLOP_PACKS_SEASON_DEPLOY_BLOCK = SLOP_PACKS_DEPLOY_BLOCK;
 
 export const MAX_SUPPLY = 10_000;
 
@@ -92,6 +95,38 @@ export type IndexedNftCollectionSlug = IndexedNftCollection["slug"];
 
 export function indexedNftCollectionBySlug(slug: string): IndexedNftCollection | null {
   return INDEXED_NFT_COLLECTIONS.find((collection) => collection.slug === slug) ?? null;
+}
+
+export const SLOPLING_MAX_SUPPLY = 10_000;
+export const SLOPLING_FEED_INTERVAL_SECONDS = 30 * 24 * 60 * 60;
+export const SLOPLING_STATE_NAMES = ["alive", "starving", "dead", "immortal"] as const;
+export type SloplingCareState = (typeof SLOPLING_STATE_NAMES)[number];
+
+export const SLOPLING_METADATA_BASE = "https://cdn.slops.xyz/sloplings/alive/metadata/";
+
+export const SLOP_PACK_VAULT_COLLECTIONS = [
+  { address: "0x9251dec8df720c2adf3b6f46d968107cbbadf4d4" as Address, name: "1337 skulls" },
+  { address: "0x57a204aa1042f6e66dd7730813f4024114d74f37" as Address, name: "CyberKongz" },
+  { address: "0x7b1a5e0807383f84a66c8a1b1af494061a169336" as Address, name: "CyberKongz Evolution" },
+  { address: "0x2acab3dea77832c09420663b0e1cb386031ba17b" as Address, name: "DeadFellaz" },
+  { address: "0x8a90cab2b38dba80c64b7734e58ee1db38b8992e" as Address, name: "Doodles" },
+  { address: "0x1fec856e25f757fed06eb90548b0224e91095738" as Address, name: "FrankenPunks" },
+  { address: "0xb8ea78fcacef50d41375e44e6814ebba36bb33c4" as Address, name: "Good Vibes Club" },
+  { address: "0x1dafd82031eff6863adf3a25907310faee72ca5f" as Address, name: "INX" },
+  { address: "0x8943c7bac1914c9a7aba750bf2b6b09fd21037e0" as Address, name: "Lazy Lions" },
+  { address: "0x7bd29408f11d2bfc23c34f18275bbf23bb716bc7" as Address, name: "Meebits" },
+  { address: "0x9eb6e2025b64f340691e424b7fe7022ffde12438" as Address, name: "Normies" },
+  { address: "0xbd3531da5cf5857e7cfaa92426877b022e612cf8" as Address, name: "PudgyPenguins" },
+  { address: "0x8f1b132e9fd2b9a2b210baa186bf1ae650adf7ac" as Address, name: "Quirklings" },
+  { address: CONTRACTS.slonks, name: "Slonks" },
+  { address: "0xc9d198089d6c31d0ca5cc5b92c97a57a97bbfde2" as Address, name: "Space Riders" },
+] as const;
+
+export function slopPackPrizeCollectionName(address: string | null | undefined): string | null {
+  if (!address) return null;
+  const lower = address.toLowerCase();
+  if (lower === CONTRACTS.sloplings.toLowerCase()) return "Sloplings";
+  return SLOP_PACK_VAULT_COLLECTIONS.find((collection) => collection.address.toLowerCase() === lower)?.name ?? null;
 }
 
 // renderEmbeddingPixels eth_call is ~140M gas. Alchemy accepts it under 550M.

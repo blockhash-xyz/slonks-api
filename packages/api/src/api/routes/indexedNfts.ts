@@ -1,15 +1,19 @@
 import { Hono, type Context } from "hono";
-import { and, asc, eq, isNotNull, sql, type SQL } from "drizzle-orm";
+import { and, asc, desc, eq, inArray, isNotNull, sql, type SQL } from "drizzle-orm";
 import { getAddress, isAddress, type Address } from "viem";
 import {
   CHAIN_ID,
   INDEXED_NFT_COLLECTIONS,
+  SLOPLING_FEED_INTERVAL_SECONDS,
+  SLOPLING_STATE_NAMES,
   indexedNftCollectionBySlug,
+  slopPackPrizeCollectionName,
   type IndexedNftCollection,
   type IndexedNftCollectionSlug,
+  type SloplingCareState,
 } from "../../chain/contracts.ts";
 import { db } from "../../db/client.ts";
-import { indexedNftCollectionState, indexedNftTokens } from "../../db/schema.ts";
+import { indexedNftAttributes, indexedNftCollectionState, indexedNftTokens } from "../../db/schema.ts";
 import { INDEXED_NFT_CACHE_SCOPE, readThroughStateCache } from "../stateCache.ts";
 
 export const indexedNfts = new Hono();
@@ -53,6 +57,10 @@ indexedNfts.get("/:collection/tokens", async (c) => {
   return listCollectionTokens(c, c.req.param("collection"));
 });
 
+indexedNfts.get("/:collection/traits", async (c) => {
+  return listCollectionTraits(c, c.req.param("collection"));
+});
+
 indexedNfts.get("/:collection/holders", async (c) => {
   return listCollectionHolders(c, c.req.param("collection"));
 });
@@ -66,6 +74,7 @@ function collectionAlias(collectionSlug: IndexedNftCollectionSlug): Hono {
 
   app.get("/", async (c) => listCollectionTokens(c, collectionSlug));
   app.get("/tokens", async (c) => listCollectionTokens(c, collectionSlug));
+  app.get("/traits", async (c) => listCollectionTraits(c, collectionSlug));
   app.get("/holders", async (c) => listCollectionHolders(c, collectionSlug));
   app.get("/tokens/:id", async (c) => getCollectionToken(c, collectionSlug, c.req.param("id")));
   app.get("/:id", async (c) => getCollectionToken(c, collectionSlug, c.req.param("id")));
@@ -74,6 +83,26 @@ function collectionAlias(collectionSlug: IndexedNftCollectionSlug): Hono {
 }
 
 type IndexedNftStateRow = typeof indexedNftCollectionState.$inferSelect | null;
+type IndexedNftTokenRow = typeof indexedNftTokens.$inferSelect;
+type IndexedNftAttribute = { trait_type: string; value: string };
+type TraitFilter = { traitType: string; value: string };
+type TokenStatusFilter =
+  | "active"
+  | "all"
+  | "burned"
+  | "unopened"
+  | "pending"
+  | "settled"
+  | "opened"
+  | "delivered";
+type TokenListFilters = {
+  ownerLower: string | null;
+  status: TokenStatusFilter;
+  careState: SloplingCareState | null;
+  traitFilters: TraitFilter[];
+  minRank: number | null;
+  maxRank: number | null;
+};
 
 async function listCollectionTokens(c: Context, slug: string) {
   const collection = indexedNftCollectionBySlug(slug);
@@ -90,12 +119,41 @@ async function listCollectionTokens(c: Context, slug: string) {
     if (!isAddress(sp.owner)) return c.json({ error: "invalid owner" }, 400);
     ownerLower = sp.owner.toLowerCase();
   }
+  const statusResult = parseStatusParam(sp.status, collection.slug);
+  if ("error" in statusResult) return c.json({ error: statusResult.error }, 400);
+  const status = statusResult.value;
+
+  const careStateResult = parseCareStateParam(sp.careState ?? sp.state, collection.slug, sp.status);
+  if ("error" in careStateResult) return c.json({ error: careStateResult.error }, 400);
+  const careState = careStateResult.value;
+
+  const traitFilters = parseTraitFilters(c);
+  if (typeof traitFilters === "string") return c.json({ error: traitFilters }, 400);
+  if (traitFilters.length > 0 && collection.slug !== "sloplings") {
+    return c.json({ error: "trait filters are only supported for sloplings" }, 400);
+  }
+
+  const minRank = parseOptionalIntParam(sp.minRank, "minRank", 1, SLOPLING_MAX_RANK);
+  const maxRank = parseOptionalIntParam(sp.maxRank, "maxRank", 1, SLOPLING_MAX_RANK);
+  if (typeof minRank === "string") return c.json({ error: minRank }, 400);
+  if (typeof maxRank === "string") return c.json({ error: maxRank }, 400);
+  if ((minRank != null || maxRank != null) && collection.slug !== "sloplings") {
+    return c.json({ error: "rank filters are only supported for sloplings" }, 400);
+  }
 
   const result = await readThroughStateCache(
     c,
     `indexed-nft:${collection.slug}:tokens`,
     async () => {
-      const where = collectionTokenWhere(collection.slug, ownerLower);
+      const where = collectionTokenWhere(collection.slug, {
+        ownerLower,
+        status,
+        careState,
+        traitFilters,
+        minRank,
+        maxRank,
+      });
+      const orderBy = collectionTokenOrder(sp.sort);
       const [state, [countRow], rows] = await Promise.all([
         readCollectionState(collection.slug),
         db.select({ total: sql<number>`count(*)::int` }).from(indexedNftTokens).where(where),
@@ -103,24 +161,72 @@ async function listCollectionTokens(c: Context, slug: string) {
           .select()
           .from(indexedNftTokens)
           .where(where)
-          .orderBy(asc(indexedNftTokens.tokenId))
+          .orderBy(...orderBy)
           .limit(limit + 1)
           .offset((page - 1) * limit),
       ]);
 
       const hasMore = rows.length > limit;
       const visibleRows = hasMore ? rows.slice(0, limit) : rows;
+      const attributes = await readAttributesForRows(collection.slug, visibleRows);
+      const includeMetadata = includeParam(sp.include, "metadata");
 
       return {
         chainId: CHAIN_ID,
         collection: collectionDto(collection, state),
         owner: ownerLower ? formatAddress(ownerLower) : undefined,
+        status,
+        careState: careState ?? undefined,
+        traits: traitFilters.length > 0 ? traitFilters : undefined,
+        minRank: minRank ?? undefined,
+        maxRank: maxRank ?? undefined,
         count: countRow?.total ?? 0,
         page,
         limit,
         hasMore,
         nextPage: hasMore ? page + 1 : null,
-        items: visibleRows.map(tokenDto),
+        items: visibleRows.map((row) => tokenDto(row, attributes.get(row.tokenId) ?? [], { includeMetadata })),
+      };
+    },
+    { scope: INDEXED_NFT_CACHE_SCOPE },
+  );
+  return c.json(result);
+}
+
+async function listCollectionTraits(c: Context, slug: string) {
+  const collection = indexedNftCollectionBySlug(slug);
+  if (!collection) return c.json({ error: "unknown collection" }, 404);
+  if (collection.slug !== "sloplings") return c.json({ error: "traits are only supported for sloplings" }, 400);
+
+  const result = await readThroughStateCache(
+    c,
+    `indexed-nft:${collection.slug}:traits`,
+    async () => {
+      const [state, rows] = await Promise.all([
+        readCollectionState(collection.slug),
+        db
+          .select({
+            traitType: indexedNftAttributes.traitType,
+            value: indexedNftAttributes.value,
+            count: sql<number>`count(*)::int`,
+          })
+          .from(indexedNftAttributes)
+          .where(eq(indexedNftAttributes.collection, collection.slug))
+          .groupBy(indexedNftAttributes.traitType, indexedNftAttributes.value)
+          .orderBy(asc(indexedNftAttributes.traitType), sql`count(*) desc`, asc(indexedNftAttributes.value)),
+      ]);
+
+      const traits = new Map<string, Array<{ value: string; count: number }>>();
+      for (const row of rows) {
+        const values = traits.get(row.traitType) ?? [];
+        values.push({ value: row.value, count: row.count });
+        traits.set(row.traitType, values);
+      }
+
+      return {
+        chainId: CHAIN_ID,
+        collection: collectionDto(collection, state),
+        traits: [...traits.entries()].map(([traitType, values]) => ({ traitType, values })),
       };
     },
     { scope: INDEXED_NFT_CACHE_SCOPE },
@@ -213,10 +319,11 @@ async function getCollectionToken(
       ]);
 
       if (!row) return null;
+      const attributes = await readAttributesForRows(collection.slug, [row]);
       return {
         chainId: CHAIN_ID,
         collection: collectionDto(collection, state),
-        token: tokenDto(row),
+        token: tokenDto(row, attributes.get(row.tokenId) ?? [], { includeMetadata: includeParam(c.req.query("include"), "metadata") }),
       };
     },
     { scope: INDEXED_NFT_CACHE_SCOPE },
@@ -225,12 +332,109 @@ async function getCollectionToken(
   return c.json(result);
 }
 
-function collectionTokenWhere(collection: IndexedNftCollectionSlug, ownerLower: string | null): SQL {
-  const filters: SQL[] = [eq(indexedNftTokens.collection, collection), eq(indexedNftTokens.exists, true)];
-  if (ownerLower) filters.push(eq(indexedNftTokens.owner, ownerLower));
+const SLOPLING_MAX_RANK = 10_000;
+
+function collectionTokenWhere(collection: IndexedNftCollectionSlug, options: TokenListFilters): SQL {
+  const filters: SQL[] = [eq(indexedNftTokens.collection, collection)];
+  switch (options.status) {
+    case "all":
+      break;
+    case "burned":
+      filters.push(eq(indexedNftTokens.exists, false));
+      break;
+    case "unopened":
+      filters.push(eq(indexedNftTokens.exists, true));
+      filters.push(sql`coalesce(${indexedNftTokens.packRequestStatus}, 0) = 0`);
+      break;
+    case "pending":
+      filters.push(eq(indexedNftTokens.packRequestStatus, 1));
+      break;
+    case "settled":
+      filters.push(eq(indexedNftTokens.packRequestStatus, 2));
+      break;
+    case "opened":
+    case "delivered":
+      filters.push(eq(indexedNftTokens.packRequestStatus, 3));
+      break;
+    default:
+      filters.push(eq(indexedNftTokens.exists, true));
+  }
+  if (options.ownerLower) filters.push(eq(indexedNftTokens.owner, options.ownerLower));
+  if (options.careState) filters.push(sloplingCareStateFilter(options.careState));
+  if (options.minRank != null) filters.push(sql`${indexedNftTokens.rarityRank} >= ${options.minRank}`);
+  if (options.maxRank != null) filters.push(sql`${indexedNftTokens.rarityRank} <= ${options.maxRank}`);
+  for (const trait of options.traitFilters) {
+    filters.push(sql`
+      exists (
+        select 1
+        from indexed_nft_attributes a
+        where a.collection = ${collection}
+          and a.token_id = ${indexedNftTokens.tokenId}
+          and lower(a.trait_type) = lower(${trait.traitType})
+          and lower(a.value) = lower(${trait.value})
+      )
+    `);
+  }
   const where = and(...filters);
   if (!where) throw new Error("missing collection filter");
   return where;
+}
+
+function collectionTokenOrder(rawSort: string | undefined): SQL[] {
+  switch (rawSort) {
+    case "id_desc":
+      return [desc(indexedNftTokens.tokenId)];
+    case "rarity_rank_asc":
+    case "rank_asc":
+      return [sql`${indexedNftTokens.rarityRank} asc nulls last`, asc(indexedNftTokens.tokenId)];
+    case "rarity_rank_desc":
+    case "rank_desc":
+      return [sql`${indexedNftTokens.rarityRank} desc nulls last`, asc(indexedNftTokens.tokenId)];
+    default:
+      return [asc(indexedNftTokens.tokenId)];
+  }
+}
+
+function sloplingCareStateFilter(state: SloplingCareState): SQL {
+  switch (state) {
+    case "immortal":
+      return eq(indexedNftTokens.sloplingImmortal, true);
+    case "alive":
+      return sql`${indexedNftTokens.sloplingImmortal} = false and now() < ${indexedNftTokens.sloplingPaidThrough}`;
+    case "starving":
+      return sql`
+        ${indexedNftTokens.sloplingImmortal} = false
+        and now() >= ${indexedNftTokens.sloplingPaidThrough}
+        and now() < (${indexedNftTokens.sloplingPaidThrough} + interval '30 days')
+      `;
+    case "dead":
+      return sql`
+        ${indexedNftTokens.sloplingImmortal} = false
+        and now() >= (${indexedNftTokens.sloplingPaidThrough} + interval '30 days')
+      `;
+  }
+}
+
+async function readAttributesForRows(
+  collection: IndexedNftCollectionSlug,
+  rows: IndexedNftTokenRow[],
+): Promise<Map<number, IndexedNftAttribute[]>> {
+  const tokenIds = rows.map((row) => row.tokenId);
+  if (tokenIds.length === 0) return new Map();
+
+  const attrRows = await db
+    .select()
+    .from(indexedNftAttributes)
+    .where(and(eq(indexedNftAttributes.collection, collection), inArray(indexedNftAttributes.tokenId, tokenIds)))
+    .orderBy(asc(indexedNftAttributes.tokenId), asc(indexedNftAttributes.traitType));
+
+  const byToken = new Map<number, IndexedNftAttribute[]>();
+  for (const row of attrRows) {
+    const list = byToken.get(row.tokenId) ?? [];
+    list.push({ trait_type: row.traitType, value: row.value });
+    byToken.set(row.tokenId, list);
+  }
+  return byToken;
 }
 
 async function readCollectionState(collection: IndexedNftCollectionSlug): Promise<IndexedNftStateRow> {
@@ -250,20 +454,126 @@ function collectionDto(collection: IndexedNftCollection, state: IndexedNftStateR
     contract: getAddress(collection.address),
     startBlock: Number(collection.startBlock),
     lastIndexedBlock: state?.lastIndexedBlock == null ? 0 : Number(state.lastIndexedBlock),
+    extendedLastIndexedBlock: state?.extendedLastIndexedBlock == null ? 0 : Number(state.extendedLastIndexedBlock),
   };
 }
 
-function tokenDto(row: typeof indexedNftTokens.$inferSelect) {
+function tokenDto(
+  row: IndexedNftTokenRow,
+  staticAttributes: IndexedNftAttribute[] = [],
+  options: { includeMetadata?: boolean } = {},
+) {
+  const attributes = attributesWithDynamicState(row, staticAttributes);
+  const lifecycleState = packLifecycleState(row);
+  const careState = sloplingCareState(row);
   return {
     collection: row.collection,
     tokenId: row.tokenId,
     status: row.exists ? "active" : "burned",
     exists: row.exists,
     owner: formatAddress(row.owner),
+    tokenUri: row.tokenUri,
+    name: row.name,
+    image: row.image,
+    attributes,
+    rarityScore: row.rarityScore,
+    rarityRank: row.rarityRank,
+    careState,
+    paidThrough: row.sloplingPaidThrough?.toISOString() ?? null,
+    isImmortal: row.collection === "sloplings" ? row.sloplingImmortal : undefined,
+    feedingPeriodsRequired: row.collection === "sloplings" ? sloplingFeedingPeriodsRequired(row, careState) : undefined,
+    lifecycleState,
+    openRequest:
+      row.collection === "slop-packs"
+        ? {
+            status: lifecycleState,
+            entropyBlock: row.packEntropyBlock?.toString() ?? null,
+            position: row.packPosition?.toString() ?? null,
+            chosen: row.packChosen?.toString() ?? null,
+            beneficiary: formatAddress(row.packBeneficiary),
+          }
+        : undefined,
+    openedAsset:
+      row.collection === "slop-packs" && row.packOpenedNftContract
+        ? {
+            collection: formatAddress(row.packOpenedNftContract),
+            collectionName: slopPackPrizeCollectionName(row.packOpenedNftContract),
+            tokenId: row.packOpenedTokenId,
+            beneficiary: formatAddress(row.packBeneficiary),
+            blockNumber: row.packOpenedAtBlock?.toString() ?? null,
+            logIndex: row.packOpenedAtLogIndex,
+            txHash: row.packOpenedTxHash,
+            timestamp: row.packOpenedAtTimestamp?.toISOString() ?? null,
+          }
+        : undefined,
+    metadata: options.includeMetadata ? metadataDto(row, attributes) : undefined,
     mintedAtBlock: row.mintedAtBlock == null ? null : Number(row.mintedAtBlock),
     lastEventBlock: row.lastEventBlock == null ? null : Number(row.lastEventBlock),
     updatedAt: row.updatedAt.toISOString(),
   };
+}
+
+function metadataDto(row: IndexedNftTokenRow, attributes: IndexedNftAttribute[]): Record<string, unknown> | null {
+  if (!row.metadataJson) return null;
+  return {
+    ...row.metadataJson,
+    attributes,
+  };
+}
+
+function attributesWithDynamicState(
+  row: IndexedNftTokenRow,
+  attributes: IndexedNftAttribute[],
+): IndexedNftAttribute[] {
+  if (row.collection !== "sloplings") return attributes;
+  const careState = sloplingCareState(row);
+  if (!careState) return attributes;
+  return [
+    ...attributes.filter((attribute) => attribute.trait_type.toLowerCase() !== "state"),
+    { trait_type: "State", value: stateLabel(careState) },
+  ];
+}
+
+function sloplingCareState(row: IndexedNftTokenRow): SloplingCareState | null {
+  if (row.collection !== "sloplings") return null;
+  if (row.sloplingImmortal) return "immortal";
+  if (!row.sloplingPaidThrough) return null;
+
+  const now = Date.now();
+  const paidThroughMs = row.sloplingPaidThrough.getTime();
+  if (now < paidThroughMs) return "alive";
+  if (now < paidThroughMs + SLOPLING_FEED_INTERVAL_SECONDS * 1000) return "starving";
+  return "dead";
+}
+
+function sloplingFeedingPeriodsRequired(
+  row: IndexedNftTokenRow,
+  careState: SloplingCareState | null,
+): number | null {
+  if (!row.sloplingPaidThrough || !careState) return null;
+  if (careState === "immortal" || careState === "dead") return 0;
+  const now = Date.now();
+  const paidThroughMs = row.sloplingPaidThrough.getTime();
+  if (paidThroughMs > now) return 1;
+  return Math.floor((now - paidThroughMs) / (SLOPLING_FEED_INTERVAL_SECONDS * 1000)) + 1;
+}
+
+function packLifecycleState(row: IndexedNftTokenRow): "unopened" | "pending" | "settled" | "delivered" | "burned" | null {
+  if (row.collection !== "slop-packs") return null;
+  switch (row.packRequestStatus) {
+    case 1:
+      return "pending";
+    case 2:
+      return "settled";
+    case 3:
+      return "delivered";
+    default:
+      return row.exists ? "unopened" : "burned";
+  }
+}
+
+function stateLabel(state: SloplingCareState): string {
+  return state.slice(0, 1).toUpperCase() + state.slice(1);
 }
 
 function formatAddress(address: string | null): Address | null {
@@ -292,4 +602,90 @@ function parseIntParam(
   const value = Number(raw);
   if (!Number.isInteger(value) || value < min || value > max) return `invalid ${name}`;
   return value;
+}
+
+function parseOptionalIntParam(
+  raw: string | undefined,
+  name: string,
+  min: number,
+  max: number,
+): number | null | string {
+  if (raw == null || raw === "") return null;
+  const value = Number(raw);
+  if (!Number.isInteger(value) || value < min || value > max) return `invalid ${name}`;
+  return value;
+}
+
+function parseStatusParam(
+  raw: string | undefined,
+  collection: IndexedNftCollectionSlug,
+): { value: TokenStatusFilter } | { error: string } {
+  const value = (raw ?? "active").trim().toLowerCase();
+  if (value === "active" || value === "all" || value === "burned") return { value };
+  if (collection === "sloplings" && isSloplingCareState(value)) return { value: "active" };
+  if (
+    collection === "slop-packs" &&
+    (value === "unopened" ||
+      value === "pending" ||
+      value === "settled" ||
+      value === "opened" ||
+      value === "delivered")
+  ) {
+    return { value };
+  }
+  return { error: "invalid status" };
+}
+
+function parseCareStateParam(
+  raw: string | undefined,
+  collection: IndexedNftCollectionSlug,
+  statusRaw: string | undefined,
+): { value: SloplingCareState | null } | { error: string } {
+  const statusAlias = statusRaw?.trim().toLowerCase();
+  const value = (raw ?? (statusAlias && isSloplingCareState(statusAlias) ? statusAlias : "")).trim().toLowerCase();
+  if (!value) return { value: null };
+  if (collection !== "sloplings") return { error: "careState is only supported for sloplings" };
+  if (!isSloplingCareState(value)) return { error: "invalid careState" };
+  return { value };
+}
+
+function parseTraitFilters(c: Context): TraitFilter[] | string {
+  const params = new URL(c.req.url).searchParams;
+  const filters: TraitFilter[] = [];
+
+  for (const raw of params.getAll("trait")) {
+    const parsed = parseTraitFilter(raw);
+    if (typeof parsed === "string") return parsed;
+    filters.push(parsed);
+  }
+
+  const traitType = params.get("traitType")?.trim();
+  const traitValue = params.get("traitValue")?.trim();
+  if (traitType || traitValue) {
+    if (!traitType || !traitValue) return "traitType and traitValue must be provided together";
+    filters.push({ traitType, value: traitValue });
+  }
+
+  return filters;
+}
+
+function parseTraitFilter(raw: string): TraitFilter | string {
+  const separator = raw.includes("=") ? "=" : raw.includes(":") ? ":" : null;
+  if (!separator) return "trait must be formatted as trait:value or trait=value";
+  const index = raw.indexOf(separator);
+  const traitType = raw.slice(0, index).trim();
+  const value = raw.slice(index + 1).trim();
+  if (!traitType || !value) return "trait must include both trait type and value";
+  return { traitType, value };
+}
+
+function isSloplingCareState(value: string): value is SloplingCareState {
+  return (SLOPLING_STATE_NAMES as readonly string[]).includes(value);
+}
+
+function includeParam(raw: string | undefined, value: string): boolean {
+  return (raw ?? "")
+    .split(",")
+    .map((part) => part.trim())
+    .includes(value);
 }
