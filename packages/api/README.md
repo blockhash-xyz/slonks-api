@@ -331,6 +331,9 @@ Query params:
 - `baseSourceId`, `sourceId`: exact source id, `0..9999`.
 - `type`: exact punk type, for example `Male`, `Female`, `Zombie`, `Ape`, `Alien`.
 - `attribute`: case-insensitive text match against attributes.
+- `trait`: repeatable exact trait filter, formatted as `Trait Type:Value` or
+  `Trait Type=Value`; for example `Type:Male` or `Attribute:Hoodie`.
+- `traitType` + `traitValue`: alternate single exact trait filter.
 - `sort`: `id_asc` default, `id_desc`, `slop_asc`, `slop_desc`, `slop_level_desc`, `merge_desc`.
 - `page`: default `1`.
 - `limit`: default `50`, max `200`.
@@ -342,6 +345,7 @@ Examples:
 curl -sS "https://api.slonks.xyz/tokens?sort=slop_desc&limit=20"
 curl -sS "https://api.slonks.xyz/tokens?ids=0,1,2,505"
 curl -sS "https://api.slonks.xyz/tokens?owner=0x2052051a0474fb0b98283b3f38c13b0b0b6a3677&include=pixels"
+curl -sS "https://api.slonks.xyz/tokens?trait=Type:Male&trait=Attribute:Hoodie"
 ```
 
 Normal filtered response:
@@ -349,6 +353,7 @@ Normal filtered response:
 ```ts
 {
   items: TokenListItem[];
+  traits?: Array<{ traitType: string; value: string }>;
   page: number;
   limit: number;
   hasMore: boolean;
@@ -363,6 +368,22 @@ Normal filtered response:
   items: TokenSnapshot[];
   count: number;
   missingIds: number[];
+}
+```
+
+### `GET /tokens/traits`
+
+Filter menu data for Slonk source-punk traits across active revealed tokens.
+
+Returns:
+
+```ts
+{
+  chainId: 1;
+  traits: Array<{
+    traitType: string;
+    values: Array<{ value: string; count: number }>;
+  }>;
 }
 ```
 

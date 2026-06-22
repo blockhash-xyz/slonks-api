@@ -15,6 +15,7 @@ import {
 import { db } from "../../db/client.ts";
 import { indexedNftAttributes, indexedNftCollectionState, indexedNftTokens } from "../../db/schema.ts";
 import { INDEXED_NFT_CACHE_SCOPE, readThroughStateCache } from "../stateCache.ts";
+import { parseTraitFiltersFromUrl, type TraitFilter } from "../traitFilters.ts";
 
 export const indexedNfts = new Hono();
 export const slopPacks = collectionAlias("slop-packs");
@@ -85,7 +86,6 @@ function collectionAlias(collectionSlug: IndexedNftCollectionSlug): Hono {
 type IndexedNftStateRow = typeof indexedNftCollectionState.$inferSelect | null;
 type IndexedNftTokenRow = typeof indexedNftTokens.$inferSelect;
 type IndexedNftAttribute = { trait_type: string; value: string };
-type TraitFilter = { traitType: string; value: string };
 type TokenStatusFilter =
   | "active"
   | "all"
@@ -125,7 +125,7 @@ async function listCollectionTokens(c: Context, slug: string) {
   if ("error" in careStateResult) return c.json({ error: careStateResult.error }, 400);
   const careState = careStateResult.value;
 
-  const traitFilters = parseTraitFilters(c);
+  const traitFilters = parseTraitFiltersFromUrl(c.req.url);
   if (typeof traitFilters === "string") return c.json({ error: traitFilters }, 400);
   if (traitFilters.length > 0 && collection.slug !== "sloplings") {
     return c.json({ error: "trait filters are only supported for sloplings" }, 400);
@@ -609,36 +609,6 @@ function parseCareStateParam(
   if (collection !== "sloplings") return { error: "careState is only supported for sloplings" };
   if (!isSloplingCareState(value)) return { error: "invalid careState" };
   return { value };
-}
-
-function parseTraitFilters(c: Context): TraitFilter[] | string {
-  const params = new URL(c.req.url).searchParams;
-  const filters: TraitFilter[] = [];
-
-  for (const raw of params.getAll("trait")) {
-    const parsed = parseTraitFilter(raw);
-    if (typeof parsed === "string") return parsed;
-    filters.push(parsed);
-  }
-
-  const traitType = params.get("traitType")?.trim();
-  const traitValue = params.get("traitValue")?.trim();
-  if (traitType || traitValue) {
-    if (!traitType || !traitValue) return "traitType and traitValue must be provided together";
-    filters.push({ traitType, value: traitValue });
-  }
-
-  return filters;
-}
-
-function parseTraitFilter(raw: string): TraitFilter | string {
-  const separator = raw.includes("=") ? "=" : raw.includes(":") ? ":" : null;
-  if (!separator) return "trait must be formatted as trait:value or trait=value";
-  const index = raw.indexOf(separator);
-  const traitType = raw.slice(0, index).trim();
-  const value = raw.slice(index + 1).trim();
-  if (!traitType || !value) return "trait must include both trait type and value";
-  return { traitType, value };
 }
 
 function isSloplingCareState(value: string): value is SloplingCareState {

@@ -1,5 +1,5 @@
 import { Hono } from "hono";
-import { and, asc, desc, eq, gte, ilike, inArray, lte, or, type SQL } from "drizzle-orm";
+import { and, asc, desc, eq, gte, ilike, inArray, lte, or, sql, type SQL } from "drizzle-orm";
 import { isAddress } from "viem";
 import { db } from "../../db/client.ts";
 import { collectionState, sourcePunks, tokens, transfers, merges, slopClaims } from "../../db/schema.ts";
@@ -7,6 +7,7 @@ import { buildTokenSnapshot } from "../../lib/snapshot.ts";
 import { buildMergeTree } from "../lineage.ts";
 import { includeParam, mergeDto, tokenListDto, transferDto } from "../dto.ts";
 import { readThroughStateCache } from "../stateCache.ts";
+import { parseTraitFiltersFromUrl, type TraitFilter } from "../traitFilters.ts";
 
 export const tokens_route: Hono = new Hono();
 
@@ -15,6 +16,37 @@ async function getCollection() {
   if (!row) throw new Error("collection_state not initialized");
   return row;
 }
+
+tokens_route.get("/traits", async (c) => {
+  const result = await readThroughStateCache(c, "tokens:traits", async () => {
+    const rows = await db.execute<{ traitType: string; value: string; count: number }>(sql`
+      select
+        attr.value ->> 'trait_type' as "traitType",
+        attr.value ->> 'value' as "value",
+        count(*)::int as "count"
+      from tokens t
+      join source_punks sp on sp.source_id = t.source_id
+      cross join lateral jsonb_array_elements(sp.attributes_json) as attr(value)
+      where t.exists = true and t.source_id is not null
+      group by attr.value ->> 'trait_type', attr.value ->> 'value'
+      order by attr.value ->> 'trait_type', count(*) desc, attr.value ->> 'value'
+    `);
+
+    const traits = new Map<string, Array<{ value: string; count: number }>>();
+    for (const row of rows) {
+      const values = traits.get(row.traitType) ?? [];
+      values.push({ value: row.value, count: row.count });
+      traits.set(row.traitType, values);
+    }
+
+    return {
+      chainId: 1,
+      traits: [...traits.entries()].map(([traitType, values]) => ({ traitType, values })),
+    };
+  });
+
+  return c.json(result);
+});
 
 tokens_route.get("/:id{[0-9]+}", async (c) => {
   const id = Number(c.req.param("id"));
@@ -41,7 +73,7 @@ tokens_route.get("/:id{[0-9]+}", async (c) => {
   return c.json(snap);
 });
 
-// GET /tokens?owner=0x..&mergeLevel=&minSlop=&maxSlop=&type=&attribute=&sort=&page=&limit=
+// GET /tokens?owner=0x..&mergeLevel=&minSlop=&maxSlop=&type=&attribute=&trait=&sort=&page=&limit=
 tokens_route.get("/", async (c) => {
   const sp = c.req.query();
   if (sp.ids != null) {
@@ -111,6 +143,8 @@ tokens_route.get("/", async (c) => {
   // Type / attribute filters require joining source_punks.
   const typeFilter = sp.type;
   const attrFilter = sp.attribute;
+  const traitFilters = parseTraitFiltersFromUrl(c.req.url);
+  if (typeof traitFilters === "string") return c.json({ error: traitFilters }, 400);
 
   let order: SQL[];
   switch (sp.sort) {
@@ -166,6 +200,7 @@ tokens_route.get("/", async (c) => {
           ...conditions,
           typeFilter ? eq(sourcePunks.punkType, typeFilter) : undefined,
           attrFilter ? ilike(sourcePunks.attributesText, `%${attrFilter}%`) : undefined,
+          ...traitFilters.map(slonkTraitFilter),
         ),
       )
       .orderBy(...order)
@@ -177,7 +212,14 @@ tokens_route.get("/", async (c) => {
     const items = visibleRows.map((row) => tokenListDto(row, includePixels));
     const nextPage = hasMore ? page + 1 : null;
 
-    return { items, page, limit, hasMore, nextPage };
+    return {
+      items,
+      traits: traitFilters.length > 0 ? traitFilters : undefined,
+      page,
+      limit,
+      hasMore,
+      nextPage,
+    };
   });
   return c.json(result);
 });
@@ -254,4 +296,15 @@ function parseIntParam(
     return `invalid ${name}`;
   }
   return value;
+}
+
+function slonkTraitFilter(trait: TraitFilter): SQL {
+  return sql`
+    exists (
+      select 1
+      from jsonb_array_elements(coalesce(${sourcePunks.attributesJson}, '[]'::jsonb)) as attr(value)
+      where lower(attr.value ->> 'trait_type') = lower(${trait.traitType})
+        and lower(attr.value ->> 'value') = lower(${trait.value})
+    )
+  `;
 }
