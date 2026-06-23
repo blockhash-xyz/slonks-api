@@ -332,7 +332,8 @@ Query params:
 - `type`: exact punk type, for example `Male`, `Female`, `Zombie`, `Ape`, `Alien`.
 - `attribute`: case-insensitive text match against attributes.
 - `trait`: repeatable exact trait filter, formatted as `Trait Type:Value` or
-  `Trait Type=Value`; for example `Type:Male` or `Attribute:Hoodie`.
+  `Trait Type=Value`; for example `Type:Male`, `Attribute:Hoodie`, or
+  `Merge Level:2`.
 - `traitType` + `traitValue`: alternate single exact trait filter.
 - `sort`: `id_asc` default, `id_desc`, `slop_asc`, `slop_desc`, `slop_level_desc`, `merge_desc`.
 - `page`: default `1`.
@@ -346,6 +347,7 @@ curl -sS "https://api.slonks.xyz/tokens?sort=slop_desc&limit=20"
 curl -sS "https://api.slonks.xyz/tokens?ids=0,1,2,505"
 curl -sS "https://api.slonks.xyz/tokens?owner=0x2052051a0474fb0b98283b3f38c13b0b0b6a3677&include=pixels"
 curl -sS "https://api.slonks.xyz/tokens?trait=Type:Male&trait=Attribute:Hoodie"
+curl -sS "https://api.slonks.xyz/tokens?trait=Merge%20Level:2"
 ```
 
 Normal filtered response:
@@ -373,7 +375,8 @@ Normal filtered response:
 
 ### `GET /tokens/traits`
 
-Filter menu data for Slonk source-punk traits across active revealed tokens.
+Filter menu data for Slonk source-punk traits plus metadata traits such as
+`Merge Level` across active revealed tokens.
 
 Returns:
 

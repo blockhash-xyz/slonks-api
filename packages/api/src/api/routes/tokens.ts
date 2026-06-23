@@ -1,5 +1,5 @@
 import { Hono } from "hono";
-import { and, asc, desc, eq, gte, ilike, inArray, lte, or, sql, type SQL } from "drizzle-orm";
+import { and, asc, desc, eq, gte, ilike, inArray, isNotNull, lte, or, sql, type SQL } from "drizzle-orm";
 import { isAddress } from "viem";
 import { db } from "../../db/client.ts";
 import { collectionState, sourcePunks, tokens, transfers, merges, slopClaims } from "../../db/schema.ts";
@@ -11,6 +11,8 @@ import { parseTraitFiltersFromUrl, type TraitFilter } from "../traitFilters.ts";
 
 export const tokens_route: Hono = new Hono();
 
+const MERGE_LEVEL_TRAIT_TYPE = "Merge Level";
+
 async function getCollection() {
   const [row] = await db.select().from(collectionState).where(eq(collectionState.id, 1)).limit(1);
   if (!row) throw new Error("collection_state not initialized");
@@ -19,21 +21,33 @@ async function getCollection() {
 
 tokens_route.get("/traits", async (c) => {
   const result = await readThroughStateCache(c, "tokens:traits", async () => {
-    const rows = await db.execute<{ traitType: string; value: string; count: number }>(sql`
-      select
-        attr.value ->> 'trait_type' as "traitType",
-        attr.value ->> 'value' as "value",
-        count(*)::int as "count"
-      from tokens t
-      join source_punks sp on sp.source_id = t.source_id
-      cross join lateral jsonb_array_elements(sp.attributes_json) as attr(value)
-      where t.exists = true and t.source_id is not null
-      group by attr.value ->> 'trait_type', attr.value ->> 'value'
-      order by attr.value ->> 'trait_type', count(*) desc, attr.value ->> 'value'
-    `);
+    const [sourceRows, mergeLevelRows] = await Promise.all([
+      db.execute<{ traitType: string; value: string; count: number }>(sql`
+        select
+          attr.value ->> 'trait_type' as "traitType",
+          attr.value ->> 'value' as "value",
+          count(*)::int as "count"
+        from tokens t
+        join source_punks sp on sp.source_id = t.source_id
+        cross join lateral jsonb_array_elements(sp.attributes_json) as attr(value)
+        where t.exists = true and t.source_id is not null
+        group by attr.value ->> 'trait_type', attr.value ->> 'value'
+        order by attr.value ->> 'trait_type', count(*) desc, attr.value ->> 'value'
+      `),
+      db
+        .select({
+          traitType: sql<string>`${MERGE_LEVEL_TRAIT_TYPE}`,
+          value: sql<string>`${tokens.mergeLevel}::text`,
+          count: sql<number>`count(*)::int`,
+        })
+        .from(tokens)
+        .where(and(eq(tokens.exists, true), isNotNull(tokens.sourceId)))
+        .groupBy(tokens.mergeLevel)
+        .orderBy(tokens.mergeLevel),
+    ]);
 
     const traits = new Map<string, Array<{ value: string; count: number }>>();
-    for (const row of rows) {
+    for (const row of [...sourceRows, ...mergeLevelRows]) {
       const values = traits.get(row.traitType) ?? [];
       values.push({ value: row.value, count: row.count });
       traits.set(row.traitType, values);
@@ -299,6 +313,8 @@ function parseIntParam(
 }
 
 function slonkTraitFilter(trait: TraitFilter): SQL {
+  if (isMergeLevelTrait(trait)) return and(eq(tokens.mergeLevel, Number(trait.value)), isNotNull(tokens.sourceId))!;
+
   return sql`
     exists (
       select 1
@@ -307,4 +323,14 @@ function slonkTraitFilter(trait: TraitFilter): SQL {
         and lower(attr.value ->> 'value') = lower(${trait.value})
     )
   `;
+}
+
+function isMergeLevelTrait(trait: TraitFilter): boolean {
+  const value = Number(trait.value);
+  return (
+    trait.traitType.trim().toLowerCase() === MERGE_LEVEL_TRAIT_TYPE.toLowerCase() &&
+    Number.isInteger(value) &&
+    value >= 0 &&
+    value <= 255
+  );
 }
